@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'operation.php';
+require_once __DIR__ . '/operation.php';
 
 // Access Control: Only Admins can manipulate stock directly
 if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'Admin') {

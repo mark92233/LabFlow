@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'operation.php';
+require_once __DIR__ . '/operation.php';
 $db = new DataManager();
 
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['category_name'])) {

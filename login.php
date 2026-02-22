@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'dbRelated/operation.php';
+require_once __DIR__ . '/dbRelated/operation.php';
 
 // Security: If they didn't come from the index.php identity check, send them back
 if (!isset($_SESSION['login_id'])) {

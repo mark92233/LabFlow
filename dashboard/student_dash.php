@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once '../dbRelated/operation.php';
+require_once __DIR__ . '/../dbRelated/operation.php';
 
 /**
  * Access Control: Ensure only authorized Students can view this page [cite: 2025-12-06]

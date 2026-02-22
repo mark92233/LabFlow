@@ -1,4 +1,5 @@
- <?php
+<?php
+if (!class_exists('Database')) {
 class Database {
     private $host = "localhost";
     private $db_name = "snhs_inventory"; // Ensure this matches your MySQL DB name
@@ -17,5 +18,6 @@ class Database {
         }
         return $this->conn;
     }
+}
 }
 ?>

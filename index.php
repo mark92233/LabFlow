@@ -3,7 +3,7 @@ session_start();
 
 // --- CONFIGURATION & IMPORTS ---
 // Adjust these paths if your folder structure changes
-require_once 'dbRelated/operation.php';
+require_once __DIR__ . '/dbRelated/operation.php';
 
 // Safe include for EmailSender (prevents crash if file is missing during dev)
 if (file_exists('dbRelated/EmailSender.php')) {

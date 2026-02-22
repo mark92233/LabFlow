@@ -1,6 +1,6 @@
 <?php
 session_start(); // Required to check the user_role
-require_once 'operation.php';
+require_once __DIR__ . '/operation.php';
 $db = new DataManager();
 
 if(isset($_GET['id'])) {

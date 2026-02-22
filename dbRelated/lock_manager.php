@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'operation.php';
+require_once __DIR__ . '/operation.php';
 
 header('Content-Type: application/json');
 

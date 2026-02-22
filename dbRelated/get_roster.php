@@ -10,7 +10,7 @@ ob_start();
 header('Content-Type: application/json');
 
 // 2. LOAD DEPENDENCIES
-require_once 'operation.php'; 
+require_once __DIR__ . '/operation.php'; 
 
 try {
     if (!isset($_POST['classes'])) {

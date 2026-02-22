@@ -1,6 +1,7 @@
 <?php
-require_once 'db_connect.php';
+require_once __DIR__ . '/db_connect.php';
 
+if (!class_exists('DataManager')) {
 class DataManager {
     public $db;
 
@@ -291,6 +292,57 @@ class DataManager {
             $stmt->execute(['tid' => $teacherID]);
             return (int)$stmt->fetchColumn();
         } catch (PDOException $e) { return 0; }
+    }
+
+    // --- ADMIN DASHBOARD ANALYTICS ---
+    public function getAdminKPIs() {
+        try {
+            $stats = [];
+            
+            // 1. Inventory Stats
+            $inv = $this->db->query("SELECT COUNT(*) as unique_items, SUM(Total_Qty) as total_stock FROM inventory")->fetch(PDO::FETCH_ASSOC);
+            $stats['unique_items'] = $inv['unique_items'] ?? 0;
+            $stats['total_stock'] = $inv['total_stock'] ?? 0;
+
+            // 2. User & Request Stats
+            $stats['total_users'] = $this->db->query("SELECT COUNT(*) FROM users")->fetchColumn();
+            $stats['pending_reqs'] = $this->db->query("SELECT COUNT(*) FROM borrowing_sessions WHERE Status = 'Pending'")->fetchColumn();
+            $stats['open_damages'] = $this->db->query("SELECT COUNT(*) FROM damaged_returns WHERE status = 'Unresolved'")->fetchColumn();
+
+            // 3. Population Stats
+            $stats['student_pop'] = $this->db->query("SELECT COUNT(*) FROM lookup_masterlist WHERE Role = 'Student'")->fetchColumn();
+            $stats['teacher_pop'] = $this->db->query("SELECT COUNT(*) FROM lookup_masterlist WHERE Role = 'Teacher'")->fetchColumn();
+            $stats['total_classes'] = $this->db->query("SELECT COUNT(*) FROM classes")->fetchColumn();
+
+            // 3. Graph Data: Inventory by Category
+            $catSql = "SELECT c.Category_Name, COUNT(i.ItemID) as count 
+                       FROM inventory i 
+                       JOIN categories c ON i.CategoryID = c.CategoryID 
+                       GROUP BY c.Category_Name";
+            $stats['categories'] = $this->db->query($catSql)->fetchAll(PDO::FETCH_ASSOC);
+
+            // 4. Graph Data: Session Status
+            $statusSql = "SELECT Status, COUNT(*) as count FROM borrowing_sessions GROUP BY Status";
+            $stats['session_stats'] = $this->db->query($statusSql)->fetchAll(PDO::FETCH_ASSOC);
+
+            // 5. Trend Data: Borrowing (Last 7 Days)
+            $trendSql = "SELECT DATE(CreatedAt) as date, COUNT(*) as count 
+                         FROM borrowing_sessions 
+                         WHERE CreatedAt >= DATE(NOW()) - INTERVAL 7 DAY 
+                         GROUP BY DATE(CreatedAt) 
+                         ORDER BY date ASC";
+            $stats['borrowing_trend'] = $this->db->query($trendSql)->fetchAll(PDO::FETCH_ASSOC);
+
+            // 6. Trend Data: Damages (Last 7 Days)
+            $dmgTrendSql = "SELECT DATE(logged_at) as date, COUNT(*) as count 
+                            FROM damaged_returns 
+                            WHERE logged_at >= DATE(NOW()) - INTERVAL 7 DAY 
+                            GROUP BY DATE(logged_at) 
+                            ORDER BY date ASC";
+            $stats['damage_trend'] = $this->db->query($dmgTrendSql)->fetchAll(PDO::FETCH_ASSOC);
+
+            return $stats;
+        } catch (PDOException $e) { return []; }
     }
 
     // Generate a unique hash for QR codes
@@ -786,7 +838,7 @@ public function processReturnWithDamage($session_id, $damage_data) {
         $reported_damage_map = [];
         
         // Ensure Directory Exists
-        $target_dir = "../../uploads/evidence/";
+        $target_dir = __DIR__ . "/../uploads/evidence/";
         if (!file_exists($target_dir)) { mkdir($target_dir, 0777, true); }
 
         // D. Log Damages & Upload Files
@@ -1054,7 +1106,7 @@ public function getEnrolledStudents($class_id) {
     public function submitDamageProof($damage_id, $file) {
         if (!$this->db) { return "Database Error"; }
 
-        $target_dir = "../../uploads/settlements/";
+        $target_dir = __DIR__ . "/../uploads/settlements/";
         if (!file_exists($target_dir)) { mkdir($target_dir, 0777, true); }
 
         $ext = strtolower(pathinfo($file["name"], PATHINFO_EXTENSION));
@@ -1624,4 +1676,5 @@ public function getStudentsByClassList($classIdArray) {
         ];
     }
     
+}
 }

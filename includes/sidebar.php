@@ -1,22 +1,19 @@
 <?php
 // Ensure DB operations are available for the badge count
 // Adjust the path 'dbRelated/operation.php' if your directory structure differs relative to this file
-$root_path = $_SERVER['DOCUMENT_ROOT'] . "/snhs-inventory/";
-if (file_exists($root_path . "dbRelated/operation.php")) {
-    require_once $root_path . "dbRelated/operation.php";
-}
+require_once __DIR__ . '/../dbRelated/operation.php';
 
-$base_url = "/snhs-inventory/"; 
+$base_url = "/LabFlow/"; 
 $current_script = basename($_SERVER['PHP_SELF']);
 $role = $_SESSION['user_role'] ?? 'Student';
 
 // --- FETCH NOTIFICATION COUNTS (TEACHER ONLY) ---
 $settlement_badge = 0;
-if ($role === 'Teacher' && class_exists('DataManager')) {
+if (($role === 'Teacher' || $role === 'Admin') && class_exists('DataManager')) {
     $db_nav = new DataManager();
     // Check if function exists to avoid crashing if operation.php isn't updated yet
-    if (method_exists($db_nav, 'getPendingSettlements')) {
-        $settlement_badge = count($db_nav->getPendingSettlements());
+    if (method_exists($db_nav, 'getSettlementCases')) {
+        $settlement_badge = count($db_nav->getSettlementCases('pending'));
     }
 }
 ?>

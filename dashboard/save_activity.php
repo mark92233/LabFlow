@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once '../dbRelated/operation.php';
+require_once __DIR__ . '/../dbRelated/operation.php';
 
 // Security Check
 if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] !== 'Teacher' && $_SESSION['user_role'] !== 'Admin')) {

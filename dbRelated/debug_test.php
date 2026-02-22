@@ -10,7 +10,11 @@ echo "<h3>1. Checking operation.php...</h3>";
 if (!file_exists('operation.php')) {
     die("<span style='color:red'>❌ operation.php NOT FOUND. Check your file path!</span>");
 }
-require_once 'operation.php';
+require_once __DIR__ . '/operation.php';
+echo "<span style='color:green'>✅ operation.php loaded.</span><br>";
+__DIR__ . '/operation.php';
+echo "<span style='color:green'>✅ operation.php loaded.</span><br>";
+__DIR__ . '/operation.php';
 echo "<span style='color:green'>✅ operation.php loaded.</span><br>";
 
 // 2. CHECK CLASS INSTANTIATION

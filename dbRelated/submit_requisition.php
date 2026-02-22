@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'operation.php';
+require_once __DIR__ . '/operation.php';
 
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../index.php");
@@ -39,7 +39,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($cartItems)) {
-        die("Error: Requisition bag is empty.");
+        header("Location: ../pages/student/inventory_shop.php?error=empty_cart");
+        exit();
     }
 
     try {
