@@ -1,0 +1,6 @@
+# Disable script execution
+php_flag engine off
+Options -ExecCGI
+AddHandler cgi-script .php .php3 .php4 .phtml .pl .py .jsp .asp .htm .html .sh .cgi
+# Prevent directory listing
+Options -Indexes
