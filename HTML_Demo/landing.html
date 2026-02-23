@@ -176,7 +176,7 @@
             <!-- Tabs Navigation -->
             <div class="flex justify-center mb-16 overflow-x-auto py-4">
                 <div class="bg-slate-100 p-1.5 rounded-full inline-flex relative min-w-max">
-                    <div id="tab-indicator" class="absolute h-[calc(100%-12px)] top-[6px] transition-all duration-300 bg-crimson rounded-full shadow-md w-[calc(33.33%-4px)] left-[6px]"></div>
+                    <div id="tab-indicator" class="absolute h-[calc(100%-12px)] top-[6px] transition-all duration-300 bg-crimson rounded-full shadow-md w-[calc(25%-4px)] left-[6px]"></div>
                     
                     <button onclick="switchTab('group')" id="btn-group" class="tab-btn relative z-10 px-4 md:px-6 py-3 text-xs md:text-sm font-bold transition-colors w-36 md:w-64 rounded-full text-white flex items-center justify-center gap-2">
                         <svg class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -191,6 +191,11 @@
                     <button onclick="switchTab('no-activity')" id="btn-no-activity" class="tab-btn relative z-10 px-4 md:px-6 py-3 text-xs md:text-sm font-bold transition-colors w-36 md:w-64 rounded-full text-slate-500 hover:text-slate-700 flex items-center justify-center gap-2">
                         <svg class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
                         Direct Borrow
+                    </button>
+
+                    <button onclick="switchTab('damage')" id="btn-damage" class="tab-btn relative z-10 px-4 md:px-6 py-3 text-xs md:text-sm font-bold transition-colors w-36 md:w-64 rounded-full text-slate-500 hover:text-slate-700 flex items-center justify-center gap-2">
+                        <svg class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        Damage Return
                     </button>
                 </div>
             </div>
@@ -403,6 +408,77 @@
                                 <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-start pt-4">
                                     <div class="w-4 h-4 bg-white rounded-full border-4 border-orange-400 shadow-md relative z-10"></div>
                                     <div class="w-0.5 h-full bg-gradient-to-b from-orange-200 to-transparent border-l border-dashed border-orange-300/50"></div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 4: Damage Return Workflow -->
+                <div id="content-damage" class="tab-content hidden transition-opacity duration-500">
+                    <div class="relative">
+                        <!-- Central Line (Desktop) -->
+                        <div class="hidden lg:block absolute top-1/2 left-0 w-full h-1.5 bg-gradient-to-r from-orange-200 via-crimson-200 to-orange-200 -translate-y-1/2 rounded-full z-0 opacity-30"></div>
+
+                        <!-- Vertical Line (Mobile) -->
+                        <div class="lg:hidden absolute left-1/2 top-0 bottom-0 w-1 bg-gradient-to-b from-orange-100 via-crimson-100 to-orange-100 -translate-x-1/2 rounded-full z-0"></div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-0 lg:h-[450px]">
+                            
+                            <div class="relative flex flex-col items-center lg:justify-start lg:h-[50%] lg:self-start group">
+                                <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-orange-100/50 border border-orange-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mb-6 lg:mb-0 max-w-xs mx-auto">
+                                    <div class="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mx-auto mb-4 shadow-inner">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                                    </div>
+                                    <h3 class="font-bold text-slate-800 mb-2">Inspect & Log</h3>
+                                    <p class="text-xs text-slate-500 leading-relaxed">Technician flags item as damaged/lost and captures photo evidence.</p>
+                                </div>
+                                <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-start pt-4">
+                                    <div class="w-4 h-4 bg-white rounded-full border-4 border-orange-400 shadow-md relative z-10"></div>
+                                    <div class="w-0.5 h-full bg-gradient-to-b from-orange-200 to-transparent border-l border-dashed border-orange-300/50"></div>
+                                </div>
+                            </div>
+
+                            <div class="relative flex flex-col items-center lg:justify-end lg:h-[50%] lg:self-end group">
+                                <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-end pb-4">
+                                    <div class="w-0.5 h-full bg-gradient-to-t from-crimson-200 to-transparent border-l border-dashed border-crimson-300/50"></div>
+                                    <div class="w-4 h-4 bg-white rounded-full border-4 border-crimson shadow-md relative z-10"></div>
+                                </div>
+                                <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-crimson-100/50 border border-crimson-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mt-6 lg:mt-0 max-w-xs mx-auto">
+                                    <div class="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center text-crimson mx-auto mb-4 shadow-inner">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                                    </div>
+                                    <h3 class="font-bold text-slate-800 mb-2">Settlement Option</h3>
+                                    <p class="text-xs text-slate-500 leading-relaxed">Student chooses to pay the fee or provide a replacement item.</p>
+                                </div>
+                            </div>
+
+                            <div class="relative flex flex-col items-center lg:justify-start lg:h-[50%] lg:self-start group">
+                                <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-orange-100/50 border border-orange-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mb-6 lg:mb-0 max-w-xs mx-auto">
+                                    <div class="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mx-auto mb-4 shadow-inner">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                                    </div>
+                                    <h3 class="font-bold text-slate-800 mb-2">Proof & Receipt</h3>
+                                    <p class="text-xs text-slate-500 leading-relaxed">Technician uploads proof of settlement and issues a transaction receipt.</p>
+                                </div>
+                                <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-start pt-4">
+                                    <div class="w-4 h-4 bg-white rounded-full border-4 border-orange-400 shadow-md relative z-10"></div>
+                                    <div class="w-0.5 h-full bg-gradient-to-b from-orange-200 to-transparent border-l border-dashed border-orange-300/50"></div>
+                                </div>
+                            </div>
+
+                            <div class="relative flex flex-col items-center lg:justify-end lg:h-[50%] lg:self-end group">
+                                <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-end pb-4">
+                                    <div class="w-0.5 h-full bg-gradient-to-t from-crimson-200 to-transparent border-l border-dashed border-crimson-300/50"></div>
+                                    <div class="w-4 h-4 bg-white rounded-full border-4 border-crimson shadow-md relative z-10"></div>
+                                </div>
+                                <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-crimson-100/50 border border-crimson-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mt-6 lg:mt-0 max-w-xs mx-auto">
+                                    <div class="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center text-crimson mx-auto mb-4 shadow-inner">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                    </div>
+                                    <h3 class="font-bold text-slate-800 mb-2">Record Cleared</h3>
+                                    <p class="text-xs text-slate-500 leading-relaxed">Student liability is cleared and inventory is reconciled.</p>
                                 </div>
                             </div>
 
@@ -737,7 +813,7 @@
 
     <script>
         function switchTab(tabName) {
-            const tabs = ['group', 'individual', 'no-activity'];
+            const tabs = ['group', 'individual', 'no-activity', 'damage'];
             const index = tabs.indexOf(tabName);
             const indicator = document.getElementById('tab-indicator');
             
@@ -745,9 +821,11 @@
             if (index === 0) {
                 indicator.style.left = '6px';
             } else if (index === 1) {
-                indicator.style.left = 'calc(33.33% + 2px)';
+                indicator.style.left = 'calc(25% + 2px)';
             } else if (index === 2) {
-                indicator.style.left = 'calc(66.66% - 2px)';
+                indicator.style.left = 'calc(50% - 2px)';
+            } else if (index === 3) {
+                indicator.style.left = 'calc(75% - 6px)';
             }
 
             // Update Text Colors
@@ -919,9 +997,7 @@
             } else if (flowState.step === 2) {
                 const pass = formData.get('password');
                 if (pass === flowState.user.password) {
-                    alert(`Login Successful! Welcome ${flowState.user.name}`);
-                    toggleModal(false);
-                    resetFlow();
+                    window.location.href = '404.html';
                 } else {
                     showError("Incorrect password.");
                 }
@@ -993,7 +1069,7 @@
                 html += `<div id="login-error-msg" class="text-crimson text-xs font-bold mt-2 text-center hidden"></div>`;
                 html += `<button type="submit" class="w-full rounded-lg bg-crimson px-3 py-3 text-sm font-bold text-white shadow-sm hover:bg-red-700 transition-colors">Verify Identity</button>`;
             } else if (flowState.step === 2) {
-                html += `<div><div class="flex justify-between items-center"><label for="password" class="block text-sm font-bold text-slate-700">Password</label><button type="button" onclick="toggleModal(false); toggleRecoveryModal(true)" class="text-xs font-semibold text-crimson hover:text-red-700 transition-colors">Forgot Password?</button></div><input type="password" name="password" id="password" required class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border placeholder:text-slate-400" placeholder="Enter password"><p class="text-xs text-slate-400 mt-1">Try: password</p></div>`;
+                html += `<div><div class="flex justify-between items-center"><label for="password" class="block text-sm font-bold text-slate-700">Password</label><button type="button" onclick="window.location.href='404.html'" class="text-xs font-semibold text-crimson hover:text-red-700 transition-colors">Forgot Password?</button></div><input type="password" name="password" id="password" required class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border placeholder:text-slate-400" placeholder="Enter password"><p class="text-xs text-slate-400 mt-1">Try: password</p></div>`;
                 html += `<div id="login-error-msg" class="text-crimson text-xs font-bold mt-2 text-center hidden"></div>`;
                 html += `<button type="submit" class="w-full rounded-lg bg-crimson px-3 py-3 text-sm font-bold text-white shadow-sm hover:bg-red-700 transition-colors">Access Dashboard</button><div class="text-center pt-2"><button type="button" onclick="resetFlow()" class="text-xs text-slate-400 hover:text-crimson transition-colors">Not you? Switch account</button></div>`;
             } else if (flowState.step === 3) {
@@ -1131,9 +1207,7 @@
                 recoveryState.user.password = p1; // Update mock DB
                 
                 if (action === 'login') {
-                    alert(`Logging in as ${recoveryState.user.name}...`);
-                    toggleRecoveryModal(false);
-                    // Redirect logic would go here
+                    window.location.href = '404.html';
                 } else {
                     recoveryState.step = 4;
                     renderRecoveryFlow();
