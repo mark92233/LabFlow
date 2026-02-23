@@ -123,5 +123,35 @@
 
     <div class="fixed inset-0 pointer-events-none opacity-30 bg-grid-pattern [mask-image:linear-gradient(to_bottom,transparent,black)]"></div>
 
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-6 right-6 z-[110] hidden items-center gap-3 bg-slate-900 text-white px-5 py-4 rounded-xl shadow-2xl border border-slate-800 animate__animated animate__fadeInUp">
+        <div class="w-8 h-8 bg-green-500/20 rounded-full flex items-center justify-center text-green-500">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+        </div>
+        <div>
+            <h4 class="font-bold text-sm">Success</h4>
+            <p class="text-xs text-slate-400" id="toast-message">Action completed successfully.</p>
+        </div>
+    </div>
+
+    <script>
+        // Check for status param
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('status') === 'created') {
+            const toast = document.getElementById('toast');
+            const msg = document.getElementById('toast-message');
+            msg.textContent = "Account created successfully!";
+            
+            toast.classList.remove('hidden');
+            
+            setTimeout(() => {
+                toast.classList.remove('animate__fadeInUp');
+                toast.classList.add('animate__fadeOutDown');
+                setTimeout(() => {
+                    toast.classList.add('hidden');
+                }, 500);
+            }, 3000);
+        }
+    </script>
 </body>
 </html>
