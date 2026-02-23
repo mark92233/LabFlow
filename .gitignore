@@ -1,0 +1,13 @@
+# Dependencies
+/vendor/
+/node_modules/
+
+# Secrets
+HTML_Demo/api_secrets.php
+api_secrets.php
+.env
+
+# System Files
+.DS_Store
+Thumbs.db
+*.log
