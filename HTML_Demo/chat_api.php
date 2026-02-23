@@ -27,7 +27,12 @@ if (empty($userMessage)) {
 
 // 3. Configuration
 // Ideally, use getenv('GEMINI_API_KEY') in production
-require_once __DIR__ . '/api_secrets.php';
+$secretsFile = __DIR__ . '/api_secrets.php';
+if (!file_exists($secretsFile)) {
+    echo json_encode(['error' => 'Server Config Error: api_secrets.php is missing.']);
+    exit;
+}
+require_once $secretsFile;
 $apiKey = $GEMINI_API_KEY;
 $apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=' . $apiKey;
 

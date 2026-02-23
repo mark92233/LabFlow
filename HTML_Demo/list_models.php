@@ -5,7 +5,11 @@
 header('Content-Type: text/plain');
 
 // 1. Configuration (Using the key from your chat_api.php)
-require_once __DIR__ . '/api_secrets.php';
+$secretsFile = __DIR__ . '/api_secrets.php';
+if (!file_exists($secretsFile)) {
+    die("Error: api_secrets.php not found. Please create it with your API key.\n");
+}
+require_once $secretsFile;
 $apiKey = $GEMINI_API_KEY;
 $apiUrl = 'https://generativelanguage.googleapis.com/v1beta/models?key=' . $apiKey;
 
