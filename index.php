@@ -202,7 +202,22 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WMSU – CSM LabFlow | Modern Lab Management</title>
+    <!-- OFFLINE TAILWIND -->
+    <link href="HTML_Demo/css/output.css" rel="stylesheet">
+
+    <!-- ONLINE TAILWIND (CDN) - Fallback -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        crimson: '#dc143c',
+                    }
+                }
+            }
+        }
+    </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="icon" href="HTML_Demo/img/labflow.jpg">
@@ -260,6 +275,9 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
             background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
             background-size: 32px 32px;
         }
+        @keyframes shimmer {
+            100% { transform: translateX(100%); }
+        }
     </style>
 </head>
 <body class="bg-[#FFF9F8] text-slate-900 overflow-x-hidden bg-grid-pattern">
@@ -284,6 +302,7 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
                 <a href="#about" class="hover:text-crimson transition-colors">About</a>
                 <a href="#how-it-works" class="hover:text-crimson transition-colors">Workflow</a>
                 <a href="#why-choose" class="hover:text-crimson transition-colors">Benefits</a>
+                <a href="#install-pwa" class="hover:text-crimson transition-colors">Install App</a>
                 <button onclick="toggleModal(true)" class="bg-crimson text-white px-6 py-2.5 rounded-full font-bold hover:shadow-lg hover:shadow-crimson/30 hover:-translate-y-0.5 transition-all active:scale-95 active:translate-y-0 w-full md:w-auto">
                     Get Started
                 </button>
@@ -369,26 +388,40 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
         <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[500px] bg-gradient-to-r from-orange-50/50 via-white/0 to-crimson-50/50 -z-10 rounded-full blur-3xl opacity-60"></div>
 
         <div class="max-w-7xl mx-auto text-center">
-            <h2 class="text-3xl font-bold text-crimson section-title mb-16">How It Works</h2>
+            <div class="mb-16">
+                <span class="text-crimson font-bold tracking-wider uppercase text-xs mb-2 block">Workflow</span>
+                <h2 class="text-3xl md:text-5xl font-extrabold text-slate-900 mb-6">How It <span class="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-crimson">Works</span></h2>
+                <p class="text-slate-500 max-w-2xl mx-auto text-lg">A step-by-step guide to the digital borrowing process, ensuring clarity and accountability for every transaction.</p>
+            </div>
             
             <!-- Tabs Navigation -->
             <div class="flex justify-center mb-16 overflow-x-auto py-4">
                 <div class="bg-slate-100 p-1.5 rounded-full inline-flex relative min-w-max">
-                    <div id="tab-indicator" class="absolute h-[calc(100%-12px)] top-[6px] transition-all duration-300 bg-crimson rounded-full shadow-md w-[calc(33.33%-4px)] left-[6px]"></div>
+                    <div id="tab-indicator" class="absolute h-[calc(100%-12px)] top-[6px] transition-all duration-300 bg-crimson rounded-full shadow-md w-[calc(20%-4px)] left-[6px]"></div>
                     
-                    <button onclick="switchTab('group')" id="btn-group" class="tab-btn relative z-10 px-4 md:px-6 py-3 text-xs md:text-sm font-bold transition-colors w-36 md:w-64 rounded-full text-white flex items-center justify-center gap-2">
+                    <button onclick="switchTab('account-setup')" id="btn-account-setup" class="tab-btn relative z-10 px-2 md:px-6 py-2 md:py-3 text-[10px] md:text-sm font-bold transition-colors w-28 md:w-48 rounded-full text-white flex items-center justify-center gap-1 md:gap-2">
+                        <svg class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
+                        Account Setup
+                    </button>
+
+                    <button onclick="switchTab('group')" id="btn-group" class="tab-btn relative z-10 px-2 md:px-6 py-2 md:py-3 text-[10px] md:text-sm font-bold transition-colors w-28 md:w-48 rounded-full text-slate-500 hover:text-slate-700 flex items-center justify-center gap-1 md:gap-2">
                         <svg class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                         Group Activity
                     </button>
                     
-                    <button onclick="switchTab('individual')" id="btn-individual" class="tab-btn relative z-10 px-4 md:px-6 py-3 text-xs md:text-sm font-bold transition-colors w-36 md:w-64 rounded-full text-slate-500 hover:text-slate-700 flex items-center justify-center gap-2">
+                    <button onclick="switchTab('individual')" id="btn-individual" class="tab-btn relative z-10 px-2 md:px-6 py-2 md:py-3 text-[10px] md:text-sm font-bold transition-colors w-28 md:w-48 rounded-full text-slate-500 hover:text-slate-700 flex items-center justify-center gap-1 md:gap-2">
                         <svg class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                         Individual
                     </button>
                     
-                    <button onclick="switchTab('no-activity')" id="btn-no-activity" class="tab-btn relative z-10 px-4 md:px-6 py-3 text-xs md:text-sm font-bold transition-colors w-36 md:w-64 rounded-full text-slate-500 hover:text-slate-700 flex items-center justify-center gap-2">
+                    <button onclick="switchTab('no-activity')" id="btn-no-activity" class="tab-btn relative z-10 px-2 md:px-6 py-2 md:py-3 text-[10px] md:text-sm font-bold transition-colors w-28 md:w-48 rounded-full text-slate-500 hover:text-slate-700 flex items-center justify-center gap-1 md:gap-2">
                         <svg class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
                         Direct Borrow
+                    </button>
+
+                    <button onclick="switchTab('damage')" id="btn-damage" class="tab-btn relative z-10 px-2 md:px-6 py-2 md:py-3 text-[10px] md:text-sm font-bold transition-colors w-28 md:w-48 rounded-full text-slate-500 hover:text-slate-700 flex items-center justify-center gap-1 md:gap-2">
+                        <svg class="w-4 h-4 md:w-5 md:h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        Damage Return
                     </button>
                 </div>
             </div>
@@ -396,8 +429,92 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
             <!-- Tab Contents -->
             <div id="tab-contents" class="relative min-h-[400px]">
                 
-                <!-- Tab 1: Group Activity -->
-                <div id="content-group" class="tab-content transition-opacity duration-500">
+                <!-- Tab 1: Account Setup (Default) -->
+                <div id="content-account-setup" class="tab-content transition-opacity duration-500">
+                    <div class="relative">
+                        <!-- Central Line (Desktop) -->
+                        <div class="hidden lg:block absolute top-1/2 left-0 w-full h-1.5 bg-gradient-to-r from-orange-200 via-crimson-200 to-orange-200 -translate-y-1/2 rounded-full z-0 opacity-30"></div>
+
+                        <!-- Vertical Line (Mobile) -->
+                        <div class="lg:hidden absolute left-1/2 top-0 bottom-0 w-1 bg-gradient-to-b from-orange-100 via-crimson-100 to-orange-100 -translate-x-1/2 rounded-full z-0"></div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-8 lg:gap-0 lg:h-[450px]">
+                            
+                            <div class="relative flex flex-col items-center lg:justify-start lg:h-[50%] lg:self-start group">
+                        <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-orange-100/50 border border-orange-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mb-6 lg:mb-0 max-w-xs mx-auto">
+                            <div class="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mx-auto mb-4 shadow-inner">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M12 8h6"/><path d="M12 13h6"/></svg>
+                            </div>
+                                    <h3 class="font-bold text-slate-800 mb-2">Class Creation</h3>
+                                    <p class="text-xs text-slate-500 leading-relaxed">Teacher creates a class for their respective lab advisory.</p>
+                        </div>
+                        <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-start pt-4">
+                            <div class="w-4 h-4 bg-white rounded-full border-4 border-orange-400 shadow-md relative z-10"></div>
+                            <div class="w-0.5 h-full bg-gradient-to-b from-orange-200 to-transparent border-l border-dashed border-orange-300/50"></div>
+                        </div>
+                    </div>
+
+                    <div class="relative flex flex-col items-center lg:justify-end lg:h-[50%] lg:self-end group">
+                        <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-end pb-4">
+                            <div class="w-0.5 h-full bg-gradient-to-t from-crimson-200 to-transparent border-l border-dashed border-crimson-300/50"></div>
+                            <div class="w-4 h-4 bg-white rounded-full border-4 border-crimson shadow-md relative z-10"></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-crimson-100/50 border border-crimson-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mt-6 lg:mt-0 max-w-xs mx-auto">
+                            <div class="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center text-crimson mx-auto mb-4 shadow-inner">                              
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                            </div>
+                                    <h3 class="font-bold text-slate-800 mb-2">Registration</h3>
+                                    <p class="text-xs text-slate-500 leading-relaxed">Teacher registers students via MISTO Class List (Individual or CSV).</p>
+                        </div>
+                    </div>
+
+                    <div class="relative flex flex-col items-center lg:justify-start lg:h-[50%] lg:self-start group">
+                        <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-orange-100/50 border border-orange-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mb-6 lg:mb-0 max-w-xs mx-auto">
+                            <div class="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mx-auto mb-4 shadow-inner">
+                                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                            </div>
+                                    <h3 class="font-bold text-slate-800 mb-2">Student Login</h3>
+                                    <p class="text-xs text-slate-500 leading-relaxed">Student clicks login and inputs their Student ID.</p>
+                        </div>
+                        <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-start pt-4">
+                            <div class="w-4 h-4 bg-white rounded-full border-4 border-orange-400 shadow-md relative z-10"></div>
+                            <div class="w-0.5 h-full bg-gradient-to-b from-orange-200 to-transparent border-l border-dashed border-orange-300/50"></div>
+                        </div>
+                    </div>
+
+                    <div class="relative flex flex-col items-center lg:justify-end lg:h-[50%] lg:self-end group">
+                        <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-end pb-4">
+                            <div class="w-0.5 h-full bg-gradient-to-t from-crimson-200 to-transparent border-l border-dashed border-crimson-300/50"></div>
+                            <div class="w-4 h-4 bg-white rounded-full border-4 border-crimson shadow-md relative z-10"></div>
+                        </div>
+                        <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-crimson-100/50 border border-crimson-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mt-6 lg:mt-0 max-w-xs mx-auto">
+                            <div class="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center text-crimson mx-auto mb-4 shadow-inner">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                            </div>
+                                    <h3 class="font-bold text-slate-800 mb-2">Email Verification</h3>
+                                    <p class="text-xs text-slate-500 leading-relaxed">Student inputs WMSU email and verifies via OTP.</p>
+                        </div>
+                    </div>
+
+                    <div class="relative flex flex-col items-center lg:justify-start lg:h-[50%] lg:self-start group">
+                        <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-orange-100/50 border border-orange-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mb-6 lg:mb-0 max-w-xs mx-auto">
+                            <div class="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mx-auto mb-4 shadow-inner">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                            </div>
+                                    <h3 class="font-bold text-slate-800 mb-2">Account Secured</h3>
+                                    <p class="text-xs text-slate-500 leading-relaxed">Student creates a password and setup is done.</p>
+                        </div>
+                        <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-start pt-4">
+                            <div class="w-4 h-4 bg-white rounded-full border-4 border-orange-400 shadow-md relative z-10"></div>
+                            <div class="w-0.5 h-full bg-gradient-to-b from-orange-200 to-transparent border-l border-dashed border-orange-300/50"></div>
+                        </div>
+                    </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 2: Group Activity -->
+                <div id="content-group" class="tab-content hidden transition-opacity duration-500">
                     <div class="relative">
                         <!-- Central Line (Desktop) -->
                         <div class="hidden lg:block absolute top-1/2 left-0 w-full h-1.5 bg-gradient-to-r from-orange-200 via-crimson-200 to-orange-200 -translate-y-1/2 rounded-full z-0 opacity-30"></div>
@@ -480,7 +597,7 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
                     </div>
                 </div>
 
-                <!-- Tab 2: Individual Activity -->
+                <!-- Tab 3: Individual Activity -->
                 <div id="content-individual" class="tab-content hidden transition-opacity duration-500">
                     <div class="relative">
                         <!-- Central Line (Desktop) -->
@@ -552,6 +669,7 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
                 </div>
 
                 <!-- Tab 3: Without Activity -->
+                <!-- Tab 4: Without Activity -->
                 <div id="content-no-activity" class="tab-content hidden transition-opacity duration-500">
                     <div class="relative">
                         <!-- Central Line (Desktop) -->
@@ -681,6 +799,92 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
         </div>
     </section>
 
+    <section id="install-pwa" class="py-24 px-6 bg-gradient-to-b from-slate-50 to-white relative overflow-hidden border-t border-slate-100">
+        <!-- Decorative Elements -->
+        <div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+            <div class="absolute top-1/4 -left-20 w-96 h-96 bg-orange-100/50 rounded-full blur-3xl"></div>
+            <div class="absolute bottom-0 right-0 w-96 h-96 bg-crimson/5 rounded-full blur-3xl"></div>
+        </div>
+
+        <div class="max-w-7xl mx-auto">
+            <div class="grid lg:grid-cols-2 gap-16 items-center">
+                <div class="order-2 lg:order-1">
+                    <span class="text-crimson font-bold tracking-wider uppercase text-xs mb-2 block">Go Mobile</span>
+                    <h2 class="text-3xl md:text-5xl font-extrabold text-slate-900 mb-6">Install <span class="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-crimson">LabFlow</span> App</h2>
+                    <p class="text-slate-500 text-lg mb-8 leading-relaxed">
+                        LabFlow works seamlessly in your web browser. For a more integrated experience, you have the <strong>option to install it</strong> as a Progressive Web App (PWA) directly to your device, no app store required.
+                    </p>
+                    
+                    <div class="space-y-6 mb-10">
+                        <div class="flex items-start gap-4 p-4 rounded-2xl hover:bg-white hover:shadow-lg hover:shadow-orange-500/5 transition-all duration-300 border border-transparent hover:border-orange-100">
+                            <div class="w-12 h-12 rounded-2xl bg-orange-100 flex items-center justify-center text-orange-600 flex-shrink-0 shadow-sm">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-900 text-lg">Cross-Platform Compatibility</h4>
+                                <p class="text-slate-500 text-sm">Install on Android, iOS, Windows, or macOS. One consistent experience everywhere.</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-4 p-4 rounded-2xl hover:bg-white hover:shadow-lg hover:shadow-crimson/5 transition-all duration-300 border border-transparent hover:border-crimson/10">
+                            <div class="w-12 h-12 rounded-2xl bg-crimson/10 flex items-center justify-center text-crimson flex-shrink-0 shadow-sm">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-900 text-lg">Lightning Fast Performance</h4>
+                                <p class="text-slate-500 text-sm">Optimized caching ensures the system loads instantly, even on slower networks.</p>
+                            </div>
+                        </div>
+                        <div class="flex items-start gap-4 p-4 rounded-2xl hover:bg-white hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-300 border border-transparent hover:border-blue-100">
+                            <div class="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 flex-shrink-0 shadow-sm">
+                                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-slate-900 text-lg">No App Store Required</h4>
+                                <p class="text-slate-500 text-sm">Bypass downloads and updates. Just add to your home screen and you're ready.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="order-1 lg:order-2 relative">
+                    <div class="absolute inset-0 bg-gradient-to-tr from-orange-200 to-crimson/20 rounded-[3rem] transform rotate-3 scale-95 -z-10 blur-sm"></div>
+                    <div class="bg-white/80 backdrop-blur-xl rounded-[2.5rem] p-8 shadow-2xl border border-white/50 relative overflow-hidden">
+                        <div class="text-center">
+                            <h3 class="font-bold text-slate-900 mb-2 text-2xl">Get LabFlow</h3>
+                            <p class="text-slate-500 text-sm mb-8">Select your device to begin installation.</p>
+                            
+                            <div class="grid grid-cols-3 md:grid-cols-5 gap-2 mb-8">
+                                <button onclick="selectDevice('windows')" id="dev-windows" class="device-btn p-4 rounded-2xl border-2 border-slate-100 hover:border-orange-200 hover:bg-orange-50 transition-all flex flex-col items-center gap-2 group">
+                                    <svg class="w-8 h-8 text-slate-400 group-hover:text-orange-500 transition-colors" fill="currentColor" viewBox="0 0 24 24"><path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/></svg>
+                                    <span class="text-xs font-bold text-slate-600">Windows</span>
+                                </button>
+                                <button onclick="selectDevice('macos')" id="dev-macos" class="device-btn p-4 rounded-2xl border-2 border-slate-100 hover:border-orange-200 hover:bg-orange-50 transition-all flex flex-col items-center gap-2 group">
+                                    <svg class="w-8 h-8 text-slate-400 group-hover:text-orange-500 transition-colors" fill="currentColor" viewBox="0 0 24 24"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.21-1.98 1.08-3.11-1.06.05-2.31.71-3.06 1.61-.69.87-1.23 2.1-1.09 3.11 1.19.09 2.4-.64 3.07-1.61z"/></svg>
+                                    <span class="text-xs font-bold text-slate-600">macOS</span>
+                                </button>
+                                <button onclick="selectDevice('linux')" id="dev-linux" class="device-btn p-4 rounded-2xl border-2 border-slate-100 hover:border-orange-200 hover:bg-orange-50 transition-all flex flex-col items-center gap-2 group">
+                                    <svg class="w-8 h-8 text-slate-400 group-hover:text-orange-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 17l6-6-6-6m8 14h8"></path></svg>
+                                    <span class="text-xs font-bold text-slate-600">Linux</span>
+                                </button>
+                                <button onclick="selectDevice('android')" id="dev-android" class="device-btn p-4 rounded-2xl border-2 border-slate-100 hover:border-orange-200 hover:bg-orange-50 transition-all flex flex-col items-center gap-2 group">
+                                    <svg class="w-8 h-8 text-slate-400 group-hover:text-orange-500 transition-colors" fill="currentColor" viewBox="0 0 24 24"><path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993.0001.5511-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.4213 13.8533 8.0028 12 8.0028s-3.5902.4185-5.1367.9669L4.841 5.4667a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396"/></svg>
+                                    <span class="text-xs font-bold text-slate-600">Android</span>
+                                </button>
+                                <button onclick="selectDevice('ios')" id="dev-ios" class="device-btn p-4 rounded-2xl border-2 border-slate-100 hover:border-orange-200 hover:bg-orange-50 transition-all flex flex-col items-center gap-2 group">
+                                    <svg class="w-8 h-8 text-slate-400 group-hover:text-orange-500 transition-colors" fill="currentColor" viewBox="0 0 24 24"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.21-1.98 1.08-3.11-1.06.05-2.31.71-3.06 1.61-.69.87-1.23 2.1-1.09 3.11 1.19.09 2.4-.64 3.07-1.61z"/></svg>
+                                    <span class="text-xs font-bold text-slate-600">iOS</span>
+                                </button>
+                            </div>
+                            <button onclick="startInstallation()" id="install-btn" disabled class="w-full py-4 rounded-xl bg-slate-200 text-slate-400 font-bold text-lg transition-all shadow-none cursor-not-allowed">
+                                Select Device
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
 <footer class="bg-slate-950 text-slate-300 pt-12 md:pt-20 pb-10 border-t border-white/5">
     <div class="max-w-7xl mx-auto px-6">
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 md:gap-12 mb-16">
@@ -706,6 +910,7 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
                     <li><a href="#about" class="hover:text-crimson transition-colors">About the System</a></li>
                     <li><a href="#how-it-works" class="hover:text-crimson transition-colors">Borrowing Workflow</a></li>
                     <li><a href="#why-choose" class="hover:text-crimson transition-colors">System Benefits</a></li>
+                    <li><a href="#install-pwa" class="hover:text-crimson transition-colors">Install App</a></li>
                 </ul>
             </div>
 
@@ -1060,6 +1265,32 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
         </div>
     </div>
 
+    <!-- Installation Modal -->
+    <div id="installModal" class="fixed inset-0 z-[100] hidden items-center justify-center p-4 sm:p-6" role="dialog" aria-modal="true">
+        <div class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm transition-opacity"></div>
+
+        <div class="relative transform overflow-hidden rounded-3xl bg-white p-8 text-center shadow-2xl transition-all w-full max-w-sm border border-slate-100 animate__animated animate__zoomIn">
+            
+            <div class="mb-6 relative">
+                <div class="w-20 h-20 bg-orange-50 rounded-full flex items-center justify-center mx-auto relative z-10">
+                    <img src="HTML_Demo/img/labflow.jpg" class="w-12 h-12 rounded-xl shadow-sm">
+                </div>
+                <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 bg-orange-100/50 rounded-full animate-ping -z-0"></div>
+            </div>
+
+            <h3 class="text-xl font-black text-slate-900 mb-2">Installing LabFlow</h3>
+            <p class="text-sm text-slate-500 mb-8">Adding to Home Screen...</p>
+
+            <!-- Progress Bar -->
+            <div class="w-full bg-slate-100 rounded-full h-4 mb-4 overflow-hidden relative">
+                <div id="install-progress" class="bg-gradient-to-r from-orange-500 to-crimson h-4 rounded-full transition-all duration-300 ease-out w-0 relative">
+                    <div class="absolute inset-0 bg-white/20 animate-[shimmer_1s_infinite] border-r border-white/30" style="animation: shimmer 1s infinite linear;"></div>
+                </div>
+            </div>
+            <p id="install-percentage" class="text-xs font-bold text-crimson">0%</p>
+        </div>
+    </div>
+
     <!-- Toast Notification -->
     <div id="toast" class="fixed bottom-6 right-6 z-[110] hidden items-center gap-3 bg-slate-900 text-white px-5 py-4 rounded-xl shadow-2xl border border-slate-800 animate__animated animate__fadeInUp">
         <div class="w-8 h-8 bg-green-500/20 rounded-full flex items-center justify-center text-green-500">
@@ -1071,9 +1302,72 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
         </div>
     </div>
 
+    <!-- Chat Widget -->
+    <div id="chat-widget" class="fixed bottom-6 right-6 z-[100] flex flex-col items-end gap-4">
+        <!-- Chat Window -->
+        <div id="chat-window" class="hidden w-80 md:w-96 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200/60 overflow-hidden flex flex-col transition-all duration-300 origin-bottom-right transform scale-95 opacity-0 ring-1 ring-black/5">
+            <!-- Header -->
+            <div class="bg-crimson-gradient p-4 flex justify-between items-center text-white shadow-md relative overflow-hidden">
+                <!-- Decorative circle in header -->
+                <div class="absolute -top-4 -right-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
+                
+                <div class="flex items-center gap-3 relative z-10">
+                    <div class="w-9 h-9 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm border border-white/20 shadow-inner">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <div>
+                        <h4 class="font-bold text-sm tracking-wide">LabFlow AI</h4>
+                        <p class="text-[15px] text-white/90 flex items-center gap-1.5 font-medium"><span class="w-1.5 h-1.5 bg-green-400 rounded-full shadow-[0_0_5px_rgba(74,222,128,0.8)]"></span> Powered by Gemini 2.5 Flash</p>
+                    </div>
+                </div>
+                <button onclick="toggleChat()" class="text-white/70 hover:text-white hover:bg-white/10 rounded-full p-1 transition-all relative z-10">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <!-- Messages Area -->
+            <div id="chat-messages" class="h-96 overflow-y-auto p-4 bg-slate-50/50 space-y-4 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+                <!-- Date Separator -->
+                <div class="flex justify-center">
+                    <span class="text-[10px] font-bold text-slate-400 bg-slate-100 px-2 py-1 rounded-full uppercase tracking-wider">Today</span>
+                </div>
+
+                <!-- Bot Welcome Message -->
+                <div class="flex items-start gap-3">
+                    <div class="w-8 h-8 bg-gradient-to-br from-orange-100 to-crimson-100 rounded-full flex items-center justify-center flex-shrink-0 text-crimson border border-crimson/10 shadow-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <div class="space-y-1 max-w-[85%]">
+                        <div class="bg-white p-3.5 rounded-2xl rounded-tl-none shadow-sm border border-slate-100 text-sm text-slate-600 leading-relaxed">
+                            Hello! I'm your LabFlow assistant. Ask me anything about borrowing procedures, account setup, or lab rules.
+                        </div>
+                        <span class="text-[10px] text-slate-400 pl-1">Just now</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="p-3 bg-white border-t border-slate-100 relative z-20">
+                <form onsubmit="handleChatSubmit(event)" class="flex gap-2 items-end">
+                    <div class="relative flex-1">
+                        <input type="text" id="chat-input" class="w-full bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-crimson focus:ring-1 focus:ring-crimson transition-all placeholder:text-slate-400" placeholder="Type your question...">
+                    </div>
+                    <button type="submit" class="w-11 h-11 bg-crimson-gradient text-white rounded-xl flex items-center justify-center hover:shadow-lg hover:shadow-crimson/20 hover:-translate-y-0.5 transition-all active:scale-95">
+                        <svg class="w-5 h-5 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.768 0 013.27 20.876L5.999 12zm0 0h7.5"></path></svg>
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Chat Head Button -->
+        <button onclick="toggleChat()" id="chat-head" class="w-14 h-14 bg-crimson-gradient text-white rounded-full shadow-lg shadow-crimson/30 flex items-center justify-center hover:scale-110 transition-transform duration-300 group relative z-50">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+        </button>
+    </div>
+
     <script>
         function switchTab(tabName) {
-            const tabs = ['group', 'individual', 'no-activity'];
+            const tabs = ['account-setup', 'group', 'individual', 'no-activity', 'damage'];
             const index = tabs.indexOf(tabName);
             const indicator = document.getElementById('tab-indicator');
             
@@ -1081,9 +1375,13 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
             if (index === 0) {
                 indicator.style.left = '6px';
             } else if (index === 1) {
-                indicator.style.left = 'calc(33.33% + 2px)';
+                indicator.style.left = 'calc(20% + 2px)';
             } else if (index === 2) {
-                indicator.style.left = 'calc(66.66% - 2px)';
+                indicator.style.left = 'calc(40% - 2px)';
+            } else if (index === 3) {
+                indicator.style.left = 'calc(60% - 6px)';
+            } else if (index === 4) {
+                indicator.style.left = 'calc(80% - 10px)';
             }
 
             // Update Text Colors
@@ -1190,6 +1488,24 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
             }
         }
         
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            const msg = document.getElementById('toast-message');
+            msg.textContent = message;
+            
+            toast.classList.remove('hidden');
+            toast.classList.remove('animate__fadeOutDown');
+            toast.classList.add('animate__fadeInUp');
+            
+            setTimeout(() => {
+                toast.classList.remove('animate__fadeInUp');
+                toast.classList.add('animate__fadeOutDown');
+                setTimeout(() => {
+                    toast.classList.add('hidden');
+                }, 500);
+            }, 3000);
+        }
+
         // Simple Intersection Observer for scroll animations
         const observerOptions = { threshold: 0.1 };
         const observer = new IntersectionObserver((entries) => {
@@ -1244,6 +1560,182 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
                     };
                 });
             });
+        }
+
+        // --- PWA INSTALLATION LOGIC ---
+        let selectedDevice = null;
+
+        function selectDevice(device) {
+            selectedDevice = device;
+            
+            // Reset styles
+            document.querySelectorAll('.device-btn').forEach(btn => {
+                btn.classList.remove('border-orange-500', 'bg-orange-50');
+                btn.classList.add('border-slate-100');
+                btn.querySelector('svg').classList.remove('text-orange-500');
+                btn.querySelector('svg').classList.add('text-slate-400');
+            });
+
+            // Highlight selected
+            const btn = document.getElementById(`dev-${device}`);
+            btn.classList.remove('border-slate-100');
+            btn.classList.add('border-orange-500', 'bg-orange-50');
+            btn.querySelector('svg').classList.remove('text-slate-400');
+            btn.querySelector('svg').classList.add('text-orange-500');
+
+            // Enable Install Button
+            const installBtn = document.getElementById('install-btn');
+            installBtn.disabled = false;
+            installBtn.classList.remove('bg-slate-200', 'text-slate-400', 'cursor-not-allowed', 'shadow-none');
+            installBtn.classList.add('bg-crimson-gradient', 'text-white', 'hover:shadow-xl', 'hover:shadow-crimson/30', 'hover:-translate-y-1');
+            installBtn.textContent = 'Install Now';
+        }
+
+        function startInstallation() {
+            const modal = document.getElementById('installModal');
+            const progress = document.getElementById('install-progress');
+            const percentage = document.getElementById('install-percentage');
+            
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            let width = 0;
+            const interval = setInterval(() => {
+                width += Math.random() * 10;
+                if (width > 100) width = 100;
+                
+                progress.style.width = width + '%';
+                percentage.textContent = Math.floor(width) + '%';
+                
+                if (width === 100) {
+                    clearInterval(interval);
+                    setTimeout(() => {
+                        modal.classList.add('hidden');
+                        modal.classList.remove('flex');
+                        showToast('LabFlow installed successfully!');
+                        // Reset
+                        progress.style.width = '0%';
+                        percentage.textContent = '0%';
+                    }, 800);
+                }
+            }, 200);
+        }
+
+        // --- CHATBOT LOGIC ---
+        function toggleChat() {
+            const chatWindow = document.getElementById('chat-window');
+            
+            if (chatWindow.classList.contains('hidden')) {
+                chatWindow.classList.remove('hidden');
+                // Small delay to allow display:block to apply before opacity transition
+                setTimeout(() => {
+                    chatWindow.classList.remove('scale-95', 'opacity-0');
+                    chatWindow.classList.add('scale-100', 'opacity-100');
+                }, 10);
+            } else {
+                chatWindow.classList.remove('scale-100', 'opacity-100');
+                chatWindow.classList.add('scale-95', 'opacity-0');
+                setTimeout(() => {
+                    chatWindow.classList.add('hidden');
+                }, 300);
+            }
+        }
+
+        async function handleChatSubmit(e) {
+            e.preventDefault();
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            if (!message) return;
+
+            // Add User Message
+            addMessage(message, 'user');
+            input.value = '';
+
+            // Show typing indicator
+            showTypingIndicator();
+            
+            // Call API
+            try {
+                const response = await fetch('HTML_Demo/chat_api.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ message: message })
+                });
+                
+                const data = await response.json();
+                removeTypingIndicator();
+                
+                if (data.reply) {
+                    addMessage(data.reply, 'bot');
+                } else {
+                    addMessage("Sorry, I encountered an error: " + (data.error || "Unknown error"), 'bot');
+                }
+            } catch (error) {
+                removeTypingIndicator();
+                addMessage("Connection error. Please ensure chat_api.php is accessible.", 'bot');
+            }
+        }
+
+        function addMessage(text, sender) {
+            const container = document.getElementById('chat-messages');
+            const div = document.createElement('div');
+            const time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            
+            if (sender === 'user') {
+                div.className = 'flex items-end justify-end gap-2 animate__animated animate__fadeInUp animate__faster';
+                div.innerHTML = `
+                    <div class="space-y-1 max-w-[85%] flex flex-col items-end">
+                        <div class="bg-crimson-gradient text-white p-3.5 rounded-2xl rounded-tr-none shadow-md text-sm leading-relaxed">
+                            ${text}
+                        </div>
+                        <span class="text-[10px] text-slate-400 pr-1">${time}</span>
+                    </div>
+                `;
+                container.appendChild(div);
+                container.scrollTop = container.scrollHeight;
+            } else {
+                div.className = 'flex items-start gap-3 animate__animated animate__fadeInUp animate__faster';
+                div.innerHTML = `
+                    <div class="w-8 h-8 bg-gradient-to-br from-orange-100 to-crimson-100 rounded-full flex items-center justify-center flex-shrink-0 text-crimson border border-crimson/10 shadow-sm">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                    </div>
+                    <div class="space-y-1 max-w-[85%]">
+                        <div class="bg-white p-3.5 rounded-2xl rounded-tl-none shadow-sm border border-slate-100 text-sm text-slate-600 leading-relaxed message-content">${text}</div>
+                        <span class="text-[10px] text-slate-400 pl-1">${time}</span>
+                    </div>
+                `;
+                
+                container.appendChild(div);
+                container.scrollTop = container.scrollHeight;
+            }
+        }
+
+        function showTypingIndicator() {
+            const container = document.getElementById('chat-messages');
+            const div = document.createElement('div');
+            div.id = 'typing-indicator';
+            div.className = 'flex items-start gap-3 animate__animated animate__fadeIn';
+            div.innerHTML = `
+                <div class="w-8 h-8 bg-gradient-to-br from-orange-100 to-crimson-100 rounded-full flex items-center justify-center flex-shrink-0 text-crimson border border-crimson/10 shadow-sm">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                </div>
+                <div class="bg-white p-4 rounded-2xl rounded-tl-none shadow-sm border border-slate-100 text-sm text-slate-600">
+                    <div class="flex space-x-1">
+                        <div class="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
+                        <div class="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                        <div class="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                    </div>
+                </div>
+            `;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function removeTypingIndicator() {
+            const el = document.getElementById('typing-indicator');
+            if (el) el.remove();
         }
 
         // Open modal if PHP state dictates
