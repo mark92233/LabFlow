@@ -602,7 +602,7 @@
                     "Psr\\Http\\Message\\": "src/"
                 }
             },
-            "notification-url": "https://packagist.org/downloads/",
+            "notification-url": "https://packagist.org//",
             "license": [
                 "MIT"
             ],

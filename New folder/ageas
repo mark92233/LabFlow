@@ -1,0 +1,133 @@
+Install section
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LabFlow Features</title>
+    <link rel="stylesheet" href="style.css">
+    
+
+<body>
+
+    <section class="labflow-section">
+        <div class="header">
+            <p class="subtitle">SYSTEM ADVANTAGES</p>
+            <h1>Why Choose <span>LabFlow</span>?</h1>
+            <p class="description">
+                Built specifically for the academic needs of WMSU, replacing outdated manual logs with a secure, digital ecosystem.
+            </p>
+        </div>
+
+        <div class="features-grid">
+            <div class="card">
+                <div class="icon-box blue">
+                    <img src="https://img.icons8.com/ios-glyphs/30/ffffff/file.png" alt="icon">
+                </div>
+                <h3>Transparent Records</h3>
+                <p>Complete digital audit trails for every transaction, ensuring no item goes unaccounted for.</p>
+                <div class="bg-blob blue-blob"></div>
+            </div>
+
+            <div class="card">
+                <div class="icon-box purple">
+                    <img src="https://img.icons8.com/ios-glyphs/30/ffffff/group.png" alt="icon">
+                </div>
+                <h3>Group Accountability</h3>
+                <p>Shared responsibility tracking for team activities, making it easy to manage group projects and liability.</p>
+                <div class="bg-blob purple-blob"></div>
+            </div>
+
+            <div class="card">
+                <div class="icon-box red">
+                    <img src="https://img.icons8.com/ios-glyphs/30/ffffff/qr-code.png" alt="icon">
+                </div>
+                <h3>QR Verification</h3>
+                <p>Instant identification and secure equipment release using unique QR codes for every transaction.</p>
+                <div class="bg-blob red-blob"></div>
+            </div>
+
+            <div class="card">
+                <div class="icon-box orange">
+                    <img src="https://img.icons8.com/ios-glyphs/30/ffffff/cube.png" alt="icon">
+                </div>
+                <h3>Organized Workflow</h3>
+                <p>Streamlined borrowing and returning processes that reduce queue times and administrative bottlenecks.</p>
+                <div class="bg-blob orange-blob"></div>
+            </div>
+
+            <div class="card">
+                <div class="icon-box green">
+                    <img src="https://img.icons8.com/ios-glyphs/30/ffffff/bar-chart.png" alt="icon">
+                </div>
+                <h3>Real-Time Updates</h3>
+                <p>Live inventory status and instant notifications keep students and faculty informed about equipment availability.</p>
+                <div class="bg-blob green-blob"></div>
+            </div>
+        </div>
+    </section>
+
+    <script src="script.js"></script>
+  </body>
+ </head>
+</html>
+
+Why LabFlow section
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LabFlow System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <section class="labflow-container">
+        <div class="header">
+            <span class="subtitle">System Advantages</span>
+            <h2 class="title">Why Choose <span class="gradient-text">LabFlow?</span></h2>
+            <p class="description">Built specifically for the academic needs of WMSU, replacing outdated manual logs with a secure, digital ecosystem.</p>
+        </div>
+        
+        <div class="features-grid">
+            <div class="column">
+                <div class="card blue-theme">
+                    <div class="icon-box"> </div>
+                    <h3>Transparent Records</h3>
+                    <p>Complete digital audit trails for every transaction, ensuring no item goes unaccounted for.</p>
+                </div>
+                <div class="card orange-theme tall">
+                    <div class="icon-box"></div>
+                    <h3>Organized Workflow</h3>
+                    <p>Streamlined borrowing and returning processes that reduce queue times and administrative bottlenecks.</p>
+                </div>
+            </div>
+
+            <div class="column">
+                <div class="card purple-theme full-height">
+                    <div class="icon-box"></div>
+                    <h3>Group Accountability</h3>
+                    <p>Shared responsibility tracking for team activities, making it easy to manage group projects and liability.</p>
+                </div>
+            </div>
+
+            <div class="column">
+                <div class="card red-theme tall">
+                    <div class="icon-box"></div>
+                    <h3>QR Verification</h3>
+                    <p>Instant identification and secure equipment release using unique QR codes for every transaction.</p>
+                </div>
+                <div class="card emerald-theme">
+                    <div class="icon-box"></div>
+                    <h3>Real-Time Updates</h3>
+                    <p>Live inventory status and instant notifications keep students and faculty informed about equipment availability.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script src="why.js"></script>
+</body>
+</html>

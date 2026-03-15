@@ -1,0 +1,236 @@
+    root {
+      --primary-color: #f7941d;
+      --text-color: #333;
+      --secondary-text: #666;
+      --bg-color: #fef8f4;
+      --card-bg: #fff;
+      --btn-bg: #e9ecef;
+      --btn-text: #adb5bd;
+      --border-radius: 20px;
+     }
+
+    
+    body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+       
+    }
+
+    .container {
+    width: 100%;
+    max-width: 1200px;
+    padding: 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+       
+     }
+
+    .content {
+    flex: 1;
+    padding-right: 40px;
+    }
+
+    .header-top {
+    color: red;
+    font-size: 14px;
+    text-transform: uppercase;
+    font-weight: bold;
+    margin-bottom: 10px;
+    }
+
+    .title {
+    font-size: 48px;
+    font-weight: bold;
+     margin-bottom: 20px;
+    }
+
+    .title span {
+     color: var(--primary-color);
+    }
+
+    .description {
+    color: var(--secondary-text);
+    margin-bottom: 30px;
+    line-height: 1.6;
+    }
+
+    .description b {
+    font-weight: bold;
+    }
+
+    .feature-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+    }
+
+    .feature-icon-wrapper {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    margin-right: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    }
+
+    .feature-item:nth-child(3) .feature-icon-wrapper {
+    background-color: #fbeed9;
+    }
+
+    .feature-item:nth-child(4) .feature-icon-wrapper {
+    background-color: #fcebeb;
+    }
+
+    .feature-item:nth-child(5) .feature-icon-wrapper {
+    background-color: #e9f0fe;
+    }
+
+    .feature-item svg {
+     width: 20px;
+    height: 20px;
+    }
+
+    .feature-text {
+    flex: 1;
+    }
+
+    .feature-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 5px;
+    }
+
+    .feature-description {
+    font-size: 14px;
+    color: var(--secondary-text);
+    }
+
+    .install-card {
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius);
+    padding: 40px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+    width: 400px;
+    text-align: center;
+    }
+
+    .card-title {
+    font-size: 24px;
+    font-weight: bold;
+    margin-bottom: 10px;
+    }
+
+    .card-subtitle {
+    font-size: 14px;
+    color: var(--secondary-text);
+    margin-bottom: 30px;
+    }
+
+    .os-options {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 30px;
+    }
+
+    .os-item {
+    text-align: center;
+    cursor: pointer;
+    width: 70px;
+    }
+
+    .os-icon-wrapper {
+    width: 70px;
+    height: 70px;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 5px;
+    transition: all 0.3s ease;
+    }
+
+    .os-item:hover .os-icon-wrapper {
+    border-color: var(--primary-color);
+    }
+
+    .os-item.selected .os-icon-wrapper {
+    border-color: var(--primary-color);
+    background-color: #fff9f0;
+    }
+
+    .os-icon-wrapper svg {
+     width: 30px;
+    height: 30px;
+    }
+
+    .os-name {
+     font-size: 12px;
+    color: var(--text-color);
+    }
+
+    #select-device-btn {
+    background-color: var(--btn-bg);
+    color: var(--btn-text);
+    border: none;
+    padding: 15px;
+    width: 100%;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    }
+
+    #select-device-btn.enabled {
+    background-color: var(--primary-color);
+    color: white;
+    }
+
+
+    WHY LabFlow section 
+    :root {
+    --primary: #dc143c; /* Crimson */
+    --slate-900: #0f172a;
+    --slate-500: #64748b;
+}
+
+body { font-family: sans-serif; background: #f8fafc; padding: 40px; }
+
+.labflow-container { max-width: 1200px; margin: 0 auto; }
+.header { text-align: center; margin-bottom: 60px; }
+.subtitle { color: var(--primary); font-weight: bold; text-transform: uppercase; font-size: 12px; }
+.title { font-size: 3rem; margin-bottom: 20px; }
+.gradient-text { background: linear-gradient(to right, #f97316, var(--primary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+.features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+.column { display: flex; flex-direction: column; gap: 24px; }
+
+.card { 
+    background: white; padding: 32px; border-radius: 32px; 
+    border: 1px solid #f1f5f9; box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card:hover { transform: translateY(-8px); box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
+
+/* The tall cards */
+.tall { flex-grow: 1; display: flex; flex-direction: column; justify-content: center; }
+
+/* Theme Colors for Icons */
+.icon-box { width: 56px; height: 56px; border-radius: 16px; margin-bottom: 24px; }
+.blue-theme .icon-box { background: linear-gradient(to bottom right, #3b82f6, #2563eb); }
+.orange-theme .icon-box { background: linear-gradient(to bottom right, #f97316, #ea580c); }
+.purple-theme .icon-box { background: linear-gradient(to bottom right, #a855f7, #9333ea); }
+.red-theme .icon-box { background: linear-gradient(to bottom right, #dc143c, #b91c1c); }
+.emerald-theme .icon-box { background: linear-gradient(to bottom right, #10b981, #059669); }
