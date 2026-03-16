@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LabFlow</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined" rel="stylesheet" />
+
+<style>
+body{
+    margin:0;
+    font-family: Arial, sans-serif;
+    background:#f8f9fc;
+}
+
+/* NAVBAR */
+nav{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:15px 60px;
+    background:white;
+    box-shadow:0 2px 10px rgba(0,0,0,0.05);
+}
+
+nav h2{
+    color:#c62828;
+}
+
+nav ul{
+    list-style:none;
+    display:flex;
+    gap:30px;
+}
+
+button{
+    background:#c62828;
+    color:white;
+    border:none;
+    padding:10px 20px;
+    border-radius:20px;
+    cursor:pointer;
+}
+
+/* SECTION */
+.section{
+    text-align:center;
+    padding:60px 20px;
+}
+
+.section h1{
+    font-size:40px;
+}
+
+.section span{
+    color:#e53935;
+}
+
+.cards{
+    display:flex;
+    justify-content:center;
+    gap:40px;
+    margin-top:50px;
+    flex-wrap:wrap;
+}
+
+.card{
+    background:white;
+    padding:30px;
+    width:260px;
+    border-radius:15px;
+    box-shadow:0 5px 20px rgba(0,0,0,0.08);
+    transition:0.3s;
+    cursor:pointer;
+   
+}
+
+.card:hover{
+    transform:translateY(-10px);
+}
+
+.icon{
+    font-size:40px;
+    color:white;
+    padding:15px;
+    border-radius:12px;
+    display:inline-block;
+    transition:0.5s;
+    background-color: currentColor; /* ensures glow is visible */
+}
+
+/* Individual Colors */
+.blue{ background:#1e88e5; }        
+.purple{ background:#8e24aa; }      
+.red{ background:#e53935; }         
+.emerald{ background:#2e7d32; }     
+.orange{ background:#fb8c00; }      
+
+/* Click Animation with Glow */
+.icon.animate{
+    transform:rotate(360deg) scale(1.2);
+}
+
+/* Glow effect per color */
+.blue.animate{
+    box-shadow: 0 0 15px #1e88e5, 0 0 30px #1e88e5, 0 0 45px #1e88e5;
+}
+
+.purple.animate{
+    box-shadow: 0 0 15px #8e24aa, 0 0 30px #8e24aa, 0 0 45px #8e24aa;
+}
+
+.red.animate{
+    box-shadow: 0 0 15px #e53935, 0 0 30px #e53935, 0 0 45px #e53935;
+}
+
+.emerald.animate{
+    box-shadow: 0 0 15px #2e7d32, 0 0 30px #2e7d32, 0 0 45px #2e7d32;
+}
+
+.orange.animate{
+    box-shadow: 0 0 15px #fb8c00, 0 0 30px #fb8c00, 0 0 45px #fb8c00;
+}
+
+.card h3{
+    margin-top:20px;
+}
+</style>
+</head>
+
+<body>
+
+<nav>
+    <h2>LabFlow</h2>
+    <ul>
+        <li>About</li>
+        <li>Workflow</li>
+        <li>Benefits</li>
+        <li>Install App</li>
+    </ul>
+    <button>Get Started</button>
+</nav>
+
+<div class="section">
+    <h1>Why Choose <span>LabFlow</span></h1>
+    <p>Built specifically for academic needs of WMSU, replacing outdated manual logs with a secure, digital ecosystem.</p>
+
+    <div class="cards">
+        <div class="card">
+            <div class="icon material-symbols-outlined blue">description</div>
+            <h3>Transparent Records</h3>
+            <p>Complete digital audit trails for every transaction, ensuring no item goes unaccounted for.</p>
+        </div>
+
+        <div class="card">
+            <div class="icon material-symbols-outlined orange">view_list</div>
+            <h3>Organized Workflow</h3>
+            <p>Streamlined borrowing and returning processes to reduce queue times and administrative bottlenecks .</p>
+        </div>
+
+        <div class="card">
+            <div class="icon material-symbols-outlined purple">groups</div>
+            <h3>Group Accountability</h3>
+            <p>Shared responsibility tracking for team activities, making it easy to manage group projcts and liability.</p>
+        </div>
+
+        <div class="card">
+            <div class="icon material-symbols-outlined red">qr_code</div>
+            <h3>QR Verification</h3>
+            <p>Instant identification and sequre equipment releasing using unique QR codes for every transaction.</p>
+        </div>
+
+        <div class="card">
+            <div class="icon material-symbols-outlined emerald">bar_chart</div>
+            <h3>Real-Time Updates</h3>
+            <p>Live inventory status and instant notifications keep students and faculty informed about equipment availability.</p>
+        </div>
+
+    </div>
+</div>
+
+<script>
+// Click animation with glow
+document.querySelectorAll(".icon").forEach(icon => {
+    icon.addEventListener("click", function(){
+        this.classList.add("animate");
+        setTimeout(() => {
+            this.classList.remove("animate");
+        }, 600);
+    });
+});
+</script>
+
+</body>
+</html>
