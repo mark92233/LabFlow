@@ -18,33 +18,18 @@ if (!$activityID) {
     die("Invalid Parameters: Activity ID missing.");
 }
 
-// 2. Resolve Context (Grading vs. Progress Check)
-if ($submissionID) {
-    // CASE A: Grading Mode (Accessed via "Grade Now")
-    $subDetails = $db->db->prepare("SELECT * FROM lab_submissions WHERE SubmissionID = ?");
-    $subDetails->execute([$submissionID]);
-    $submission = $subDetails->fetch(PDO::FETCH_ASSOC);
-
-    if (!$submission) die("Submission record not found.");
-    $groupID = $submission['GroupID']; 
-
-} elseif ($groupID) {
-    // CASE B: Progress Mode (Accessed via "See Progress")
-    $subCheck = $db->db->prepare("SELECT * FROM lab_submissions WHERE ActivityID = ? AND GroupID = ?");
-    $subCheck->execute([$activityID, $groupID]);
-    $submission = $subCheck->fetch(PDO::FETCH_ASSOC);
-
-    // Create Virtual Object if no submission yet
-    if (!$submission) {
-        $submission = [
-            'SubmissionID' => null, 
-            'Status' => 'In Progress',
-            'Grade' => '',
-            'Feedback' => '',
-            'GroupID' => $groupID
-        ];
-    }
-} else {
+// 2. Resolve Context (Grading vs. Progress Check) - MODIFIED
+// Since lab_submissions is being removed, we always create a virtual object.
+// The grading functionality will be disabled from the UI.
+if ($groupID) {
+    $submission = [
+        'SubmissionID' => null, 
+        'Status' => 'In Progress',
+        'Grade' => '',
+        'Feedback' => '',
+        'GroupID' => $groupID
+    ];
+} else { // submissionID is ignored now
     die("Invalid Parameters: Missing Target (Submission ID or Group ID).");
 }
 
@@ -295,13 +280,13 @@ $currentFeedback = $submission['Feedback'] ?? '';
 
                 async submitGrade(actionType) {
                     if (!this.baseGrade && actionType === 'Graded') {
-                        alert("Please enter a base grade before posting.");
+                        showToast("Please enter a base grade before posting.", 'error');
                         return;
                     }
 
                     if (actionType === 'Returned') {
                         if (!this.feedback.trim()) {
-                            alert("Please provide feedback explaining why revision is needed.");
+                            showToast("Please provide feedback explaining why revision is needed.", 'error');
                             return;
                         }
                         if (!confirm("⚠️ This will UNLOCK the workspace for the students.\nThey will be able to edit the report again.\n\nProceed?")) return;
@@ -337,12 +322,12 @@ $currentFeedback = $submission['Feedback'] ?? '';
                             // FIXED: Redirect to activity_hub.php
                             window.location.href = "activity_hub.php?activity_id=<?= $activityID ?>";
                         } else {
-                            alert("❌ Error: " + result.message);
+                            showToast("Error: " + result.message, 'error');
                             this.isSubmitting = false;
                         }
                     } catch (error) {
                         console.error(error);
-                        alert("Connection error. Check console.");
+                        showToast("A connection error occurred. Please check the console.", 'error');
                         this.isSubmitting = false;
                     }
                 }
@@ -363,5 +348,6 @@ $currentFeedback = $submission['Feedback'] ?? '';
             });
         });
     </script>
+    <?php include '../../includes/layout_footer.php'; ?>
 </body>
 </html>

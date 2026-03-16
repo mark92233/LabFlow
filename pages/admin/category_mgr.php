@@ -9,18 +9,20 @@ if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'Admin') {
 }
 
 $db = new DataManager();
-$error = "";
-$success = "";
 
 // Handle Form Submission
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['save_category'])) {
     $catName = trim($_POST['category_name']);
+
+    $isConsumable = isset($_POST['is_consumable']) ? (int)$_POST['is_consumable'] : 0;
     if (!empty($catName)) {
-        if ($db->addCategory($catName)) {
-            $success = "Category '$catName' added successfully.";
+        if ($db->addCategory($catName, $isConsumable)) {
+            $_SESSION['toast_message'] = ['text' => "Category '$catName' added successfully.", 'type' => 'success'];
         } else {
-            $error = "Category already exists or a database error occurred.";
+            $_SESSION['toast_message'] = ['text' => "Category already exists or a database error occurred.", 'type' => 'error'];
         }
+        header("Location: category_mgr.php");
+        exit();
     }
 }
 
@@ -33,7 +35,7 @@ $page_title = "Category Manager";
     <meta charset="UTF-8">
     <title>Category Manager | SNHS</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="../../assets/css/style.css">
+    <link rel=  "stylesheet" href="../../assets/css/style.css">
 </head>
 <body class="bg-[#f8fafc] min-h-screen">
 
@@ -54,22 +56,17 @@ $page_title = "Category Manager";
                     <section class="lg:col-span-1">
                         <div class="glass-card p-8 sticky top-24">
                             <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 italic">New Classification</h3>
-                            
-                            <?php if ($success): ?>
-                                <div class="mb-6 p-4 bg-green-50 text-green-600 rounded-2xl text-[10px] font-black uppercase italic border border-green-100 italic animate-reveal">
-                                    <?= $success ?>
-                                </div>
-                            <?php endif; ?>
-                            
-                            <?php if ($error): ?>
-                                <div class="mb-6 p-4 bg-red-50 text-red-600 rounded-2xl text-[10px] font-black uppercase italic border border-red-100 italic animate-reveal">
-                                    <?= $error ?>
-                                </div>
-                            <?php endif; ?>
 
                             <form method="POST" class="space-y-4">
                                 <input type="text" name="category_name" placeholder="e.g. Glassware" 
                                        class="w-full bg-slate-50 border-none p-4 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500" required>
+                                <div>
+                                    <label for="is_consumable" class="block text-xs font-bold text-slate-500 mb-2">Category Type</label>
+                                    <select name="is_consumable" id="is_consumable" class="w-full bg-slate-50 border-none p-4 rounded-2xl font-bold text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                                        <option value="0">Non-Consumable</option>
+                                        <option value="1">Consumable</option>
+                                    </select>
+                                </div>
                                 <button type="submit" name="save_category" 
                                         class="w-full bg-[#0f172a] text-white py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-blue-600 transition-all shadow-xl">
                                     Save Category
@@ -103,5 +100,63 @@ $page_title = "Category Manager";
             </main>
         </div>
     </div>
+
+    <?php
+    $toast_message = null;
+    $toast_type = 'success'; // Default type
+
+    if (isset($_SESSION['toast_message'])) {
+        $toast_message = $_SESSION['toast_message']['text'];
+        $toast_type = $_SESSION['toast_message']['type'];
+        unset($_SESSION['toast_message']);
+    }
+    ?>
+
+    <!-- Generic Toast Container -->
+    <div id="toast-container" class="fixed bottom-10 right-10 z-[200] hidden items-center w-full max-w-xs p-4 space-x-4 text-white rounded-2xl shadow-2xl animate-reveal" role="alert">
+        <div id="toast-icon-container" class="inline-flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-xl">
+            <!-- Icon will be inserted by JS -->
+        </div>
+        <div id="toast-message" class="text-sm font-bold"></div>
+    </div>
+
+    <script>
+    function showToast(message, type = 'success') {
+        const toast = document.getElementById('toast-container');
+        if (!toast) return;
+
+        const iconContainer = document.getElementById('toast-icon-container');
+        const messageContainer = document.getElementById('toast-message');
+
+        // Reset classes
+        toast.className = 'fixed bottom-10 right-10 z-[200] flex items-center w-full max-w-xs p-4 space-x-4 text-white rounded-2xl shadow-2xl animate-reveal';
+        iconContainer.className = 'inline-flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-xl';
+
+        messageContainer.textContent = message;
+
+        if (type === 'success') {
+            toast.classList.add('bg-emerald-600');
+            iconContainer.classList.add('bg-emerald-100');
+            iconContainer.innerHTML = `<svg class="w-5 h-5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>`;
+        } else { // error
+            toast.classList.add('bg-red-600');
+            iconContainer.classList.add('bg-red-100');
+            iconContainer.innerHTML = `<svg class="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>`;
+        }
+
+        toast.classList.remove('hidden');
+        toast.style.opacity = '1';
+        toast.style.transform = 'translateY(0)';
+        toast.style.transition = 'all 0.5s ease';
+
+        setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateY(20px)'; setTimeout(() => { toast.classList.add('hidden'); }, 500); }, 4000);
+    }
+
+    <?php if ($toast_message): ?>
+    document.addEventListener('DOMContentLoaded', function() {
+        showToast('<?php echo addslashes($toast_message); ?>', '<?php echo $toast_type; ?>');
+    });
+    <?php endif; ?>
+    </script>
 </body>
 </html>

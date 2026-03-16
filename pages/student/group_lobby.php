@@ -2,12 +2,12 @@
 session_start();
 require_once '../../dbRelated/operation.php';
 
-if (!isset($_SESSION['user_id']) || !isset($_GET['id'])) {
-    header("Location: ../../index.php");
+if (!isset($_SESSION['user_id']) || empty($_GET['activity_id'])) {
+    header("Location: student_dash.php?error=no_activity");
     exit();
 }
 
-$activityID = $_GET['id'];
+$activityID = $_GET['activity_id'];
 $userID = $_SESSION['user_id'];
 $dm = new DataManager();
 
@@ -101,6 +101,7 @@ if (!$myGroup) {
 
             <?php else: ?>
                 <form id="lobbyForm" @submit.prevent="createTeam">
+                    <input type="hidden" name="action" value="create_group">
                     <input type="hidden" name="activity_id" value="<?= $activityID ?>">
                     
                     <div class="mb-6">

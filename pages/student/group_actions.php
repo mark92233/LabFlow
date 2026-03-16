@@ -22,26 +22,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     try {
         // ---------------------------------------------------------
-        // ➤ ACTION 1: ASSIGN LOGISTICS (The Fix for your Button)
+        // ➤ ACTION: BULK ASSIGN LOGISTICS
         // ---------------------------------------------------------
-        if ($action === 'assign_logistics') {
+        if ($action === 'bulk_assign_logistics') {
             $activityID = $_POST['activity_id'] ?? null;
             $groupID = $_POST['group_id'] ?? null;
-            $itemID = $_POST['item_id'] ?? null;
-            $targetID = $_POST['target_id'] ?? null;
-            $qty = $_POST['qty'] ?? 0;
+            $assignmentsJSON = $_POST['assignments'] ?? '[]';
+            $assignments = json_decode($assignmentsJSON, true);
 
-            if (!$groupID || !$itemID || !$targetID || $qty < 1) {
-                throw new Exception("Invalid distribution data.");
+            if (!$groupID || !$activityID || !is_array($assignments)) {
+                throw new Exception("Invalid bulk distribution data.");
             }
 
-            // Call the function we added to operation.php
-            $success = $db->distributeItem($activityID, $groupID, $itemID, $targetID, $qty);
+            // Call the new function in operation.php
+            $success = $db->bulkDistributeItems($activityID, $groupID, $assignments);
 
             if ($success) {
                 echo json_encode(['status' => 'success']);
             } else {
-                throw new Exception("Database failed to assign item.");
+                throw new Exception("Database failed to save assignments.");
             }
             exit();
         }
@@ -49,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // ---------------------------------------------------------
         // ➤ ACTION 2: CREATE GROUP (Refactored for Fetch)
         // ---------------------------------------------------------
-        if ($action === 'create_group' || isset($_POST['group_name'])) {
+        if ($action === 'create_group') {
             $activityID = $_POST['activity_id'];
             $groupName = trim($_POST['group_name']);
 
@@ -75,6 +74,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 foreach ($sections as $title) {
                     $stmtSec->execute([$activityID, $groupID, $title]);
+                }
+
+                // D. Add Members
+                if (!empty($_POST['members']) && is_array($_POST['members'])) {
+                    $stmtMember = $db->db->prepare("INSERT INTO group_members (GroupID, MasterID, Is_Leader) VALUES (?, ?, 0)");
+                    foreach ($_POST['members'] as $memberMasterID) {
+                        $stmtMember->execute([$groupID, (int) $memberMasterID]);
+                    }
                 }
 
                 $db->db->commit();

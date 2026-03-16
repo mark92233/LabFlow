@@ -255,5 +255,6 @@ $history = $db->getCommitHistory($activity_id, $myGroup['GroupID']);
             }
         }
     </script>
+    <?php include '../../includes/layout_footer.php'; ?>
 </body>
 </html>

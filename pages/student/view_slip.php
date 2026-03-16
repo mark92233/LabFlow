@@ -209,5 +209,6 @@ $page_title = "Digital Receipt";
             });
         }
     </script>
+    <?php include '../../includes/layout_footer.php'; ?>
 </body>
 </html>

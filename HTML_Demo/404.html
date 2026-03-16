@@ -4,22 +4,34 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Work in Progress | LabFlow</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- OFFLINE TAILWIND -->
+    <link href="css/output.css" rel="stylesheet">
+
+    <!-- ONLINE TAILWIND (CDN) - Uncomment to use if offline build is missing
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+    <style type="text/tailwindcss">
+        @theme {
+            --color-crimson: #dc143c;
+            --font-sans: "Plus Jakarta Sans", sans-serif;
+        }
+        @layer utilities {
+            .bg-crimson-gradient {
+                background-image: linear-gradient(135deg, #ff8c00 0%, #dc143c 100%);
+            }
+            .text-crimson-gradient {
+                background-image: linear-gradient(135deg, #ff8c00 0%, #dc143c 100%);
+                -webkit-background-clip: text;
+                background-clip: text;
+                color: transparent;
+            }
+        }
+    </style>
+    -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="icon" href="img/labflow.jpg">
     <style>
         body { font-family: 'Plus Jakarta Sans', sans-serif; }
-        
-        .bg-crimson-gradient {
-            background: linear-gradient(135deg, #ff8c00 0%, #dc143c 100%);
-        }
-        
-        .text-crimson-gradient {
-            background: linear-gradient(135deg, #ff8c00 0%, #dc143c 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
         
         .bg-grid-pattern {
             background-image: radial-gradient(#cbd5e1 1px, transparent 1px);

@@ -255,5 +255,6 @@ $isLeader = $myGroup && $myGroup['Is_Leader'];
             }
         }
     </script>
+    <?php include '../../includes/layout_footer.php'; ?>
 </body>
 </html>

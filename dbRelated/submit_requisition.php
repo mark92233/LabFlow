@@ -2,60 +2,71 @@
 session_start();
 require_once __DIR__ . '/operation.php';
 
-if (!isset($_SESSION['user_id'])) {
-    header("Location: ../index.php");
+// 1. Access Control & Validation
+if (!isset($_SESSION['user_id']) || $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    $_SESSION['toast_message'] = ['text' => 'Invalid request or session expired.', 'type' => 'error'];
+    header("Location: ../pages/common/inventory_hub.php");
     exit();
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $db = new DataManager();
-    $studentId = $_SESSION['user_id'];
-    $activityId = $_POST['activity_id'] ?? $_GET['activity_id'] ?? null;
-    
-    $cartItems = [];
+$db = new DataManager();
+$studentId = $_SESSION['user_id'];
+$activityId = $_POST['activity_id'] ?? $_GET['activity_id'] ?? null;
+$reason = isset($_POST['reason']) && !empty(trim($_POST['reason'])) ? trim($_POST['reason']) : null;
 
-    // 1. Updated Data Parsing for Internal Handover
-    if (!empty($_POST['final_items'])) {
-        // Source: Leader's Tagging Modal
-        foreach ($_POST['final_items'] as $index => $itemId) {
-            $cartItems[] = [
-                'id' => $itemId,
-                'qty' => 1, // Individual items are tagged 1-by-1 in this workflow
-                'possessor_id' => $_POST['possessors'][$index] // Captured from modal dropdown
-            ];
-        }
-    } elseif (!empty($_POST['cart_data'])) {
-        // Source: Inventory Hub (JSON)
-        $cartItems = json_decode($_POST['cart_data'], true);
-    } elseif (!empty($_POST['items'])) {
-        // Source: Legacy Activity View Sidebar
-        foreach ($_POST['items'] as $index => $itemId) {
-            $cartItems[] = [
-                'id' => $itemId,
-                'qty' => intval($_POST['qtys'][$index]),
-                'possessor_id' => $db->getMasterID($studentId) // Default to requester
-            ];
-        }
+$cartItems = [];
+
+// 2. Data Parsing
+if (!empty($_POST['cart_data'])) {
+    // Source: Inventory Hub / General Cart (JSON)
+    $cartItems = json_decode($_POST['cart_data'], true);
+    if (json_last_error() !== JSON_ERROR_NONE || !is_array($cartItems)) {
+        $cartItems = [];
     }
+} elseif (!empty($_POST['items'])) {
+    // Source: Activity View Sidebar (form fields)
+    foreach ($_POST['items'] as $index => $itemId) {
+        $cartItems[] = [
+            'itemId' => $itemId,
+            'variantId' => null, // Variants are not selectable from activity view yet
+            'qty' => intval($_POST['qtys'][$index])
+        ];
+    }
+}
 
-    if (empty($cartItems)) {
-        header("Location: ../pages/student/inventory_shop.php?error=empty_cart");
+// 3. Data Integrity Check
+if (empty($cartItems)) {
+    $cartPage = $activityId ? "../pages/student/activity_view.php?activity_id=$activityId" : "../pages/common/cart_page.php";
+    $_SESSION['toast_message'] = ['text' => 'Your requisition cart is empty.', 'type' => 'error'];
+    header("Location: $cartPage");
+    exit();
+}
+
+// 4. Process Requisition
+try {
+    $sessionId = $db->submitRequisition($studentId, $activityId, $cartItems, $reason);
+
+    if ($sessionId) {
+        // 5. Success Redirect
+        $_SESSION['toast_message'] = ['text' => 'Requisition submitted successfully!', 'type' => 'success'];
+        $redirect_url = $activityId
+            ? "../pages/student/activity_view.php?activity_id=" . $activityId . "&status=submitted"
+            : "../pages/student/active_slips.php?success=requisition_submitted"; // Flag to clear cart on the client-side
+        header("Location: " . $redirect_url);
+        exit();
+    } else {
+        // 6. Handle submission failure from DataManager
+        $error_message = $db->getLastError() ?: 'Failed to submit requisition. Please try again.';
+        $_SESSION['toast_message'] = ['text' => $error_message, 'type' => 'error'];
+        $cartPage = $activityId ? "../pages/student/activity_view.php?activity_id=$activityId" : "../pages/common/cart_page.php";
+        header("Location: $cartPage");
         exit();
     }
-
-    try {
-        // 2. Submit Request with Possessor Assignments
-        $sessionId = $db->submitRequisition($studentId, $activityId, $cartItems);
-
-        if ($sessionId) {
-            // Redirect back to activity view to see the new individual slips
-            header("Location: ../pages/student/activity_view.php?activity_id=" . $activityId . "&status=submitted");
-            exit();
-        } else {
-            throw new Exception("Database failed to record the session.");
-        }
-    } catch (Exception $e) {
-        error_log("Requisition Error: " . $e->getMessage());
-        die("Fatal Error: " . $e->getMessage());
-    }
+} catch (Exception $e) {
+    // 7. Handle unexpected exceptions
+    error_log("Requisition Error: " . $e->getMessage());
+    $_SESSION['toast_message'] = ['text' => 'A critical error occurred. Please contact support.', 'type' => 'error'];
+    $cartPage = $activityId ? "../pages/student/activity_view.php?activity_id=$activityId" : "../pages/common/cart_page.php";
+    header("Location: $cartPage");
+    exit();
 }

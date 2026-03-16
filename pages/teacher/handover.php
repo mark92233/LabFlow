@@ -2,112 +2,135 @@
 session_start();
 require_once '../../dbRelated/operation.php';
 
-// 1. Access Control
-if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] !== 'Teacher' && $_SESSION['user_role'] !== 'Admin')) {
+// 1. Access Control - Admin Only
+if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'Admin') {
     header("Location: ../../index.php");
     exit();
 }
 
 $db = new DataManager();
-$session_data = null;
-$borrowedItems = []; 
+$teacher_id = $_SESSION['user_id'];
+$role = $_SESSION['user_role'];
 $error = "";
 $success = "";
 
-// 2. Handle POST Actions
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+// Handle Actions (Approve, Reject, Issue)
+if (isset($_GET['action']) && isset($_GET['sid'])) {
+    $sid = $_GET['sid'];
+    $action = $_GET['action'];
+    $newStatus = '';
 
-    // --- A. SEARCH HANDLER (HYBRID LOGIC) ---
-    if (isset($_POST['find_slip']) || isset($_POST['search_input']) || isset($_POST['exact_session_id'])) {
-        
-        $query = "SELECT bs.*, u.UserID as StudentID, m.Full_Name, COALESCE(la.Title, 'General Laboratory Use') as Title
-                  FROM borrowing_sessions bs
-                  JOIN users u ON bs.StudentID = u.UserID
-                  JOIN lookup_masterlist m ON u.MasterID = m.MasterID
-                  LEFT JOIN lab_activities la ON bs.ActivityID = la.ActivityID";
-        
-        $params = [];
+    if ($action === 'approve') $newStatus = 'Approved';
+    if ($action === 'reject') $newStatus = 'Rejected';
 
-        // PATH 1: Exact Match (Clicked from Table)
-        if (!empty($_POST['exact_session_id'])) {
-            $query .= " WHERE bs.SessionID = :sid";
-            $params = ['sid' => $_POST['exact_session_id']];
-        } 
-        // PATH 2: Fuzzy Search (Scanner or Typing)
-        else {
-            $searchQuery = $_POST['search_input'] ?? '';
-            $query .= " WHERE (bs.QR_Code_Data = :input OR m.Full_Name LIKE :name_input)
-                        AND bs.Status IN ('Pending', 'Approved', 'Issued', 'Returned')";
-            $params = ['input' => $searchQuery, 'name_input' => "%$searchQuery%"];
-        }
-
-        $query .= " LIMIT 1"; 
-
-        $stmt = $db->db->prepare($query);
-        $stmt->execute($params);
-        $session_data = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        // Error Handling
-        if (!$session_data) {
-            if(!empty($_POST['exact_session_id'])) {
-                 $error = "Session #" . htmlspecialchars($_POST['exact_session_id']) . " is no longer valid.";
-            } else {
-                 $error = "No active record found.";
-            }
+    if ($newStatus) {
+        if ($db->updateSessionStatus($sid, $newStatus)) {
+            $_SESSION['toast_message'] = ['text' => "Request #{$sid} has been " . strtolower($newStatus) . ".", 'type' => 'success'];
         } else {
-            // Fetch Items
-            $iStmt = $db->db->prepare("SELECT bi.ItemID, bi.Quantity, i.Item_Name 
-                                       FROM borrowed_items bi 
-                                       JOIN inventory i ON bi.ItemID = i.ItemID 
-                                       WHERE bi.SessionID = ?");
-            $iStmt->execute([$session_data['SessionID']]);
-            $borrowedItems = $iStmt->fetchAll(PDO::FETCH_ASSOC);
+            $_SESSION['toast_message'] = ['text' => "Action failed for Request #{$sid}.", 'type' => 'error'];
+        }
+    } elseif ($action === 'issue') {
+        if ($db->finalizeHandover($sid)) {
+            $_SESSION['toast_message'] = ['text' => "Apparatus successfully issued for Request #{$sid}!", 'type' => 'success'];
+        } else {
+            $_SESSION['toast_message'] = ['text' => "Handover failed for Request #{$sid}.", 'type' => 'error'];
         }
     }
-
-    // --- B. ISSUE HANDLER ---
-    if (isset($_POST['action_issue'])) {
-        try {
-            if ($db->finalizeHandover($_POST['sid'])) {
-                $success = "Apparatus successfully issued!";
-                $session_data = null; 
-            } else {
-                $error = "Handover failed: " . ($db->getLastError() ?? "No details.");
-            }
-        } catch (Exception $e) { $error = "System Error: " . $e->getMessage(); }
-    }
-
-    // --- C. RETURN HANDLER ---
-    if (isset($_POST['action_return'])) {
-        try {
-            $sid = $_POST['sid'];
-            if (!empty($_POST['return_data'])) {
-                // Complex Return (Damaged)
-                $returnData = json_decode($_POST['return_data'], true);
-                $result = $db->processReturnWithDamage($sid, $returnData);
-            } else {
-                // Clean Return
-                $result = $db->processCleanReturn($sid);
-            }
-
-            if ($result) {
-                $success = "Return processed & Inventory updated.";
-                $session_data = null; 
-            } else {
-                $error = "Return failed. Check database connection.";
-            }
-        } catch (Exception $e) { $error = "System Error: " . $e->getMessage(); }
-    }
+    header("Location: handover.php"); // Redirect to clean URL
+    exit();
 }
 
-// 3. Waiting List Query (For the Table)
-$waitingQuery = "SELECT bs.SessionID, m.Full_Name, bs.Status, bs.CreatedAt
-                 FROM borrowing_sessions bs
-                 JOIN users u ON bs.StudentID = u.UserID
-                 JOIN lookup_masterlist m ON u.MasterID = m.MasterID
-                 WHERE bs.Status IN ('Approved', 'Issued', 'Pending') 
-                 ORDER BY bs.CreatedAt DESC LIMIT 10";
-$waitingList = $db->db->query($waitingQuery)->fetchAll(PDO::FETCH_ASSOC);
+// --- Get Filters, Search, and Pagination ---
+$search = trim($_GET['search'] ?? '');
+$class_filter = $_GET['class_filter'] ?? 'all';
+$status_filter = $_GET['status_filter'] ?? 'all'; // New status filter
+$date_sort = $_GET['date_sort'] ?? 'desc';
+$records_per_page = isset($_GET['per_page']) && in_array((int)$_GET['per_page'], [10, 15, 25, 50]) ? (int)$_GET['per_page'] : 10;
+$page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int)$_GET['page'] : 1;
+$offset = ($page - 1) * $records_per_page;
+
+// --- Build Query ---
+$params = [];
+$where_clauses = "1"; // Start with a truthy value
+
+// Base statuses for the terminal
+$allowed_statuses = ['Pending', 'Approved', 'Issued', 'Returned'];
+
+if ($status_filter !== 'all' && in_array($status_filter, $allowed_statuses)) {
+    $where_clauses .= " AND bs.Status = :status";
+    $params['status'] = $status_filter;
+} else {
+    $where_clauses .= " AND bs.Status IN ('Pending', 'Approved', 'Issued', 'Returned')";
+}
+
+// Search filtering
+if (!empty($search)) {
+    $where_clauses .= " AND (m.Full_Name LIKE :search OR la.Title LIKE :search)";
+    $params['search'] = "%$search%";
+}
+
+// Class filtering
+if ($class_filter !== 'all' && is_numeric($class_filter)) {
+    $where_clauses .= " AND c.ClassID = :class_id";
+    $params['class_id'] = $class_filter;
+}
+
+// Base query for both count and data
+$base_query = "FROM borrowing_sessions bs
+               JOIN users u ON bs.StudentID = u.UserID
+               JOIN lookup_masterlist m ON u.MasterID = m.MasterID
+               LEFT JOIN lab_activities la ON bs.ActivityID = la.ActivityID
+               LEFT JOIN activity_assignments aa ON la.ActivityID = aa.ActivityID
+               LEFT JOIN classes c ON aa.ClassID = c.ClassID
+               WHERE $where_clauses";
+
+// Get total records
+$count_query = "SELECT COUNT(DISTINCT bs.SessionID) " . $base_query;
+$count_stmt = $db->db->prepare($count_query);
+$count_stmt->execute($params);
+$total_records = (int) $count_stmt->fetchColumn();
+$total_pages = ceil($total_records / $records_per_page);
+
+$sort_direction = (strtolower($date_sort) === 'asc') ? 'ASC' : 'DESC';
+// Fetch paginated data
+$query = "SELECT bs.SessionID, bs.Status, bs.CreatedAt, m.Full_Name as StudentName, m.ID_Number as studentId, COALESCE(c.Class_Name, 'General') as Class_Name, COALESCE(la.Title, 'Independent Research') as Title, bs.Remarks, bs.QR_Code_Data
+          " . $base_query . "
+          GROUP BY bs.SessionID
+          ORDER BY FIELD(bs.Status, 'Pending', 'Approved', 'Issued', 'Returned'), bs.CreatedAt {$sort_direction}
+          LIMIT :limit OFFSET :offset";
+
+$stmt = $db->db->prepare($query);
+foreach ($params as $key => &$val) { $stmt->bindParam(":$key", $val); }
+$stmt->bindValue(':limit', $records_per_page, PDO::PARAM_INT);
+$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+$stmt->execute();
+$sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+// Prepare a full data array for JavaScript, including items for each session
+$sessionsForJs = [];
+foreach ($sessions as $session) {
+    $itemsQuery = "SELECT 
+                        i.ItemID as id, 
+                        i.Item_Name as name, 
+                        bi.Quantity as qty,
+                        i.is_consumable,
+                        iv.Size_Value,
+                        iv.Unit
+                   FROM borrowed_items bi JOIN inventory i ON bi.ItemID = i.ItemID 
+                   LEFT JOIN item_variants iv ON bi.VariantID = iv.VariantID WHERE bi.SessionID = ?";
+    $iStmt = $db->db->prepare($itemsQuery);
+    $iStmt->execute([$session['SessionID']]);
+    $sessionData = $session;
+    $sessionData['items'] = $iStmt->fetchAll(PDO::FETCH_ASSOC);
+    $sessionData['studentName'] = $session['StudentName'];
+    $sessionData['activityTitle'] = $session['Title'];
+    $sessionData['date'] = $session['CreatedAt'];
+    $sessionData['sessionId'] = $session['SessionID'];
+    $sessionsForJs[$session['SessionID']] = $sessionData;
+}
+
+// Fetch classes for filter dropdown
+$teacher_classes = $db->getAllClasses();
 
 $page_title = "Handover Terminal";
 ?>
@@ -116,13 +139,127 @@ $page_title = "Handover Terminal";
 <head>
     <meta charset="UTF-8">
     <title>Handover Terminal | SNHS</title>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/html5-qrcode"></script>
     <link rel="stylesheet" href="../../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
     <style>
-        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        @import url('https://fonts.googleapis.com/css2?family=Courier+Prime:wght@400;700&display=swap');
+        .thermal-font { font-family: 'Courier Prime', 'Courier New', Courier, monospace; }
+        .sticky-sidebar { height: calc(100vh - 120px); position: sticky; top: 100px; }
+        .receipt-container { background-color: #fff; box-shadow: 0 10px 30px rgba(0,0,0,0.1); position: relative; }
+        .receipt-tear-top {
+            position: absolute; top: -5px; left: 0; width: 100%; height: 10px;
+            background: linear-gradient(135deg, transparent 33%, #fff 33%, #fff 66%, transparent 66%) 0 0;
+            background-size: 20px 10px;
+        }
+        .receipt-tear-bottom {
+            position: absolute; bottom: -10px; left: 0; width: 100%; height: 10px;
+            background: linear-gradient(45deg, transparent 33%, #fff 33%, #fff 66%, transparent 66%) 0 0;
+            background-size: 20px 10px; transform: rotate(180deg);
+        }
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+        .shake-error { animation: shake 0.82s cubic-bezier(.36,.07,.19,.97) both; }
+        .bg-crimson-gradient { background-image: linear-gradient(135deg, #ff8c00 0%, #dc143c 100%); }
+
+        /* QR Scanner Styles */
+        #qr-scanner-container {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            margin: auto;
+            overflow: hidden;
+            border-radius: 1.5rem; /* 24px */
+            background: #1e293b; /* Dark background for contrast */
+            box-shadow: 0 20px 40px -5px rgba(0, 0, 0, 0.25);
+        }
+        #qr-reader {
+            width: 100%;
+            height: 100%;
+        }
+        #qr-reader video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover;
+        }
+        .qr-guide-overlay { position: absolute; inset: 0; pointer-events: none; }
+        .qr-guide-box { position: absolute; inset: 15%; }
+        .corner {
+            position: absolute; width: 40px; height: 40px;
+            border-color: rgba(255, 255, 255, 0.8); border-style: solid;
+        }
+        .corner.top-left { top: 0; left: 0; border-width: 5px 0 0 5px; border-top-left-radius: 1rem; }
+        .corner.top-right { top: 0; right: 0; border-width: 5px 5px 0 0; border-top-right-radius: 1rem; }
+        .corner.bottom-left { bottom: 0; left: 0; border-width: 0 0 5px 5px; border-bottom-left-radius: 1rem; }
+        .corner.bottom-right { bottom: 0; right: 0; border-width: 0 5px 5px 0; border-bottom-right-radius: 1rem; }
+        .scan-laser {
+            position: absolute; top: 15%; left: 15%; right: 15%; height: 3px;
+            background: #f97316; box-shadow: 0 0 10px #f97316, 0 0 20px #f97316;
+            border-radius: 3px; animation: scan-animation 3s infinite ease-in-out;
+        }
+        @keyframes scan-animation { 0% { top: 15%; } 50% { top: 85%; } 100% { top: 15%; } }
     </style>
+    <script>
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast-container');
+            if (!toast) return;
+
+            const iconContainer = document.getElementById('toast-icon-container');
+            const messageContainer = document.getElementById('toast-message');
+
+            toast.className = 'fixed bottom-10 right-10 z-[200] flex items-center w-full max-w-xs p-4 space-x-4 text-white rounded-2xl shadow-2xl animate-reveal';
+            iconContainer.className = 'inline-flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-xl';
+
+            messageContainer.textContent = message;
+
+            if (type === 'success') {
+                toast.classList.add('bg-emerald-600');
+                iconContainer.classList.add('bg-emerald-100');
+                iconContainer.innerHTML = `<svg class="w-5 h-5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>`;
+            } else { // error
+                toast.classList.add('bg-red-600');
+                iconContainer.classList.add('bg-red-100');
+                iconContainer.innerHTML = `<svg class="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>`;
+            }
+
+            toast.classList.remove('hidden');
+            setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => { toast.classList.add('hidden'); }, 500); }, 4000);
+        }
+    </script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('search');
+            const filterForm = document.getElementById('filterForm');
+            let debounceTimeout;
+
+            if (searchInput && filterForm) {
+                searchInput.addEventListener('input', () => {
+                    clearTimeout(debounceTimeout);
+                    debounceTimeout = setTimeout(() => {
+                        // Preserve status filter when searching
+                        const urlParams = new URLSearchParams(window.location.search);
+                        const status = urlParams.get('status_filter');
+                        if (status) {
+                            let statusInput = filterForm.querySelector('input[name="status_filter"]');
+                            if (!statusInput) {
+                                statusInput = document.createElement('input');
+                                statusInput.type = 'hidden';
+                                statusInput.name = 'status_filter';
+                                filterForm.appendChild(statusInput);
+                            }
+                            statusInput.value = status;
+                        }
+                        filterForm.submit();
+                    }, 400); // Submit form 400ms after user stops typing
+                });
+            }
+        });
+    </script>
 </head>
 <body class="bg-[#f8fafc] min-h-screen">
     <div class="flex min-h-screen">
@@ -130,332 +267,424 @@ $page_title = "Handover Terminal";
         <div class="flex-1 flex flex-col">
             <?php include '../../includes/glass_header.php'; ?>
             
-            <main class="p-8 animate-reveal relative h-[calc(100vh-100px)] overflow-hidden flex flex-col">
-                <header class="mb-8 flex-shrink-0">
-                    <h2 class="text-4xl font-extrabold text-[#0f172a] tracking-tighter mb-2">Terminal<span class="text-blue-600">.</span></h2>
-                    <p class="text-slate-400 font-medium text-xs">Scan QR or select a session to process.</p>
-                </header>
+            <main class="p-8 flex gap-8 animate-reveal">
+                
+                <!-- Left Column (Main Content) -->
+                <div class="flex-1 flex flex-col gap-6">
+                    <header class="mb-2 flex-shrink-0 flex justify-between items-center">
+                        <div>
+                            <h2 class="text-4xl font-extrabold text-gray-800 tracking-tighter mb-2">Handover <span class="text-orange-500">Terminal.</span></h2>
+                            <p class="text-slate-400 font-medium text-xs">Review, approve, and process student apparatus requisitions.</p>
+                        </div>
+                        <button onclick="startScanner()" class="flex items-center gap-3 bg-orange-500 text-white px-6 py-4 rounded-2xl font-bold shadow-lg shadow-orange-500/30 hover:bg-orange-600 transition-all text-sm">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path></svg>
+                            <span>Scan Slip</span>
+                        </button>
+                    </header>
 
-                <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 h-full min-h-0">
-                    
-                    <div class="lg:col-span-2 flex flex-col gap-6 h-full min-h-0">
-                        
-                        <section class="glass-card p-6 border-blue-500/20 shadow-lg flex-shrink-0">
-                            <div class="flex justify-between items-center mb-4">
-                                <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Identification</h3>
-                                <button type="button" onclick="toggleScanner()" id="scanner-btn" class="bg-blue-50 text-blue-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all">
-                                    Start Camera
-                                </button>
+                    <!-- Status Tabs -->
+                    <div class="bg-white p-2 rounded-2xl border border-gray-200/50 shadow-sm">
+                        <div class="flex items-center gap-2">
+                            <?php
+                                $tabs = ['all' => 'All', 'Pending' => 'Pending', 'Approved' => 'Approved', 'Issued' => 'Issued', 'Returned' => 'Returned'];
+                                $base_params = ['search' => $search, 'class_filter' => $class_filter, 'per_page' => $records_per_page, 'date_sort' => $date_sort];
+                            ?>
+                            <?php foreach ($tabs as $key => $label):
+                                $current_params = $base_params;
+                                $current_params['status_filter'] = $key;
+                                $queryString = http_build_query(array_filter($current_params));
+                                $isActive = ($status_filter === $key);
+                            ?>
+                                <a href="?<?= $queryString ?>" 
+                                   class="flex-1 text-center px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-300 
+                                   <?= $isActive ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:bg-gray-50' ?>">
+                                    <?= $label ?>
+                                </a>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+
+                    <!-- Filter and Search Section -->
+                    <div class="bg-white p-6 rounded-2xl border border-gray-200/50 shadow-sm">
+                        <form id="filterForm" method="GET" action="handover.php" class="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
+                            <div class="md:col-span-2">
+                                <label for="search" class="text-xs font-bold text-gray-500 mb-2 block">Search by Student or Activity</label>
+                                <input type="search" name="search" id="search" value="<?= htmlspecialchars($search) ?>" placeholder="e.g. John Doe or Titration" class="w-full bg-gray-50 border-gray-200 p-3 rounded-xl font-medium text-sm shadow-sm focus:ring-2 focus:ring-orange-500">
                             </div>
-
-                            <div id="scanner-wrapper" class="hidden mb-4 rounded-2xl overflow-hidden border-4 border-slate-50 bg-black shadow-inner">
-                                <div id="reader" style="width: 100%;"></div>
+                            <div>
+                                <label for="class_filter" class="text-xs font-bold text-gray-500 mb-2 block">Filter by Class</label>
+                                <select name="class_filter" id="class_filter" onchange="this.form.submit()" class="w-full bg-gray-50 border-gray-200 p-3 rounded-xl font-medium text-sm shadow-sm focus:ring-2 focus:ring-orange-500">
+                                    <option value="all">All Classes</option>
+                                    <?php foreach ($teacher_classes as $class): ?>
+                                        <option value="<?= $class['ClassID'] ?>" <?= $class_filter == $class['ClassID'] ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($class['Class_Name'] . ' - ' . $class['Section']) ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
                             </div>
+                            <div>
+                                <label for="date_sort" class="text-xs font-bold text-gray-500 mb-2 block">Sort by Date</label>
+                                <select name="date_sort" id="date_sort" onchange="this.form.submit()" class="w-full bg-gray-50 border-gray-200 p-3 rounded-xl font-medium text-sm shadow-sm focus:ring-2 focus:ring-orange-500">
+                                    <option value="desc" <?= $date_sort == 'desc' ? 'selected' : '' ?>>Newest First</option>
+                                    <option value="asc" <?= $date_sort == 'asc' ? 'selected' : '' ?>>Oldest First</option>
+                                </select>
+                            </div>
+                        </form>
+                    </div>
 
-                            <form method="POST" id="searchForm" class="flex gap-3">
-                                <input type="hidden" name="find_slip" value="1">
-                                <div class="relative flex-1">
-                                    <input type="text" name="search_input" id="search_input" 
-                                           placeholder="Scan Result or type Name..." 
-                                           class="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-sm font-bold text-slate-700">
-                                    <div class="absolute left-3 top-3 text-slate-300">
-                                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                    <!-- Queue Table & Pagination -->
+                    <div id="main-content-area" class="bg-white rounded-2xl shadow-lg border border-gray-200/50 flex-1 flex flex-col overflow-hidden">
+                        <!-- State 1: Table View -->
+                        <div id="table-view" class="flex-1 flex flex-col">
+                            <?php if (empty($sessions)): ?>
+                                <div class="flex-1 flex flex-col items-center justify-center text-center p-10">
+                                    <div class="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mb-4">
+                                        <svg class="w-8 h-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
                                     </div>
+                                    <h3 class="font-bold text-gray-700">No Requests Found</h3>
+                                    <p class="text-sm text-gray-400">There are no requests matching your current filters.</p>
                                 </div>
-                                <button type="submit" class="bg-[#0f172a] text-white px-6 rounded-xl font-bold hover:bg-blue-600 transition-all shadow-lg text-xs uppercase tracking-wider">Find</button>
-                            </form>
-                        </section>
-
-                        <section class="glass-card p-0 border border-slate-200 flex-1 overflow-hidden flex flex-col">
-                            <div class="p-4 border-b border-slate-50 bg-white/50 backdrop-blur-sm sticky top-0 z-10">
-                                <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Queue</h3>
-                            </div>
-                            
-                            <div class="overflow-y-auto custom-scrollbar flex-1">
-                                <table class="w-full text-left border-collapse">
-                                    <thead class="bg-slate-50 text-slate-400 text-[9px] font-black uppercase tracking-widest sticky top-0 z-10">
-                                        <tr>
-                                            <th class="px-6 py-3">Status</th>
-                                            <th class="px-6 py-3">Student Name</th>
-                                            <th class="px-6 py-3 text-right">Time</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="divide-y divide-slate-50">
-                                        <?php if(empty($waitingList)): ?>
+                            <?php else: ?>
+                                <div class="overflow-y-auto flex-1">
+                                    <table class="w-full text-left">
+                                        <thead class="bg-gray-50 border-b border-gray-100 sticky top-0">
                                             <tr>
-                                                <td colspan="3" class="px-6 py-8 text-center text-xs text-slate-400 italic">No active sessions in queue.</td>
+                                                <th class="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Student</th>
+                                                <th class="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Activity / Purpose</th>
+                                                <th class="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Items</th>
+                                                <th class="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-center">Status</th>
                                             </tr>
-                                        <?php else: ?>
-                                            <?php foreach ($waitingList as $row): 
-                                                // Status Color Logic
-                                                $statusClass = match($row['Status']) {
-                                                    'Approved' => 'bg-blue-100 text-blue-600',
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-100" id="pending-requests-table">
+                                            <?php foreach ($sessions as $session):
+                                                $statusClass = match($session['Status']) {
+                                                    'Approved' => 'bg-orange-100 text-orange-600',
                                                     'Issued' => 'bg-indigo-100 text-indigo-600',
                                                     'Pending' => 'bg-amber-100 text-amber-600',
+                                                    'Returned' => 'bg-green-100 text-green-600',
                                                     default => 'bg-slate-100 text-slate-500'
                                                 };
+                                                
+                                                // Prepare data for JS
+                                                $sessionData = $sessionsForJs[$session['SessionID']] ?? [];
+                                                $borrowedItems = $sessionData['items'] ?? [];
+                                                $sessionJSON = htmlspecialchars(json_encode($sessionData), ENT_QUOTES, 'UTF-8');
                                             ?>
-                                                <tr onclick="selectSession(<?= $row['SessionID'] ?>)" 
-                                                    class="cursor-pointer hover:bg-blue-50/50 transition-colors group">
-                                                    
+                                                <tr id="row-<?= $session['SessionID'] ?>" onclick='showReceipt(<?= $sessionJSON ?>)' class="hover:bg-orange-50/50 transition-colors cursor-pointer">
                                                     <td class="px-6 py-4">
+                                                        <p class="font-bold text-gray-800 text-sm"><?= htmlspecialchars($session['StudentName']) ?></p>
+                                                        <p class="text-xs text-gray-500"><?= htmlspecialchars($session['Class_Name']) ?></p>
+                                                    </td>
+                                                    <td class="px-6 py-4">
+                                                        <p class="font-bold text-gray-800 text-sm"><?= htmlspecialchars($session['Title']) ?></p>
+                                                        <p class="text-xs text-gray-500 italic truncate max-w-xs" title="<?= htmlspecialchars($session['Remarks'] ?? 'No reason provided.') ?>">"<?= htmlspecialchars($session['Remarks'] ?? 'No reason provided.') ?>"</p>
+                                                    </td>
+                                                    <td class="px-6 py-4 text-xs text-gray-600 font-medium truncate max-w-xs">
+                                                        <?= count($borrowedItems) ?> item(s)
+                                                    </td>
+                                                    <td class="px-6 py-4 text-center">
                                                         <span class="px-2 py-1 rounded-md text-[9px] font-black uppercase <?= $statusClass ?>">
-                                                            <?= $row['Status'] ?>
-                                                        </span>
-                                                    </td>
-                                                    
-                                                    <td class="px-6 py-4">
-                                                        <p class="text-xs font-bold text-slate-700 group-hover:text-blue-700 transition-colors">
-                                                            <?= htmlspecialchars($row['Full_Name']) ?>
-                                                        </p>
-                                                        <p class="text-[9px] text-slate-400 font-mono">#<?= $row['SessionID'] ?></p>
-                                                    </td>
-                                                    
-                                                    <td class="px-6 py-4 text-right">
-                                                        <span class="text-[10px] font-mono text-slate-400">
-                                                            <?= date('H:i', strtotime($row['CreatedAt'])) ?>
+                                                            <?= $session['Status'] ?>
                                                         </span>
                                                     </td>
                                                 </tr>
                                             <?php endforeach; ?>
-                                        <?php endif; ?>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </section>
-                    </div>
-
-                    <div class="space-y-6 h-full overflow-y-auto custom-scrollbar pb-10">
-                        <?php if ($error || $success): ?>
-                            <div class="<?= $error ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-50 text-green-600 border-green-100' ?> p-4 rounded-2xl text-xs font-bold border italic animate-reveal">
-                                <?= $error ?: $success ?>
-                            </div>
-                        <?php endif; ?>
-
-                        <?php if ($session_data): ?>
-                            <div class="w-full bg-white shadow-2xl p-8 rounded-3xl border-t-8 <?= ($session_data['Status'] == 'Issued') ? 'border-indigo-600' : 'border-blue-600' ?> animate-reveal">
-                                <div class="flex justify-between items-start mb-6">
-                                    <div>
-                                        <p class="text-[9px] font-black text-slate-300 uppercase mb-1">Session ID</p>
-                                        <h3 class="text-2xl font-black text-[#0f172a] uppercase italic">#<?= $session_data['SessionID'] ?></h3>
-                                    </div>
-                                    <div class="text-right">
-                                        <p class="text-[9px] font-black text-slate-300 uppercase mb-1">Borrower</p>
-                                        <h4 class="text-sm font-black text-slate-800 uppercase"><?= htmlspecialchars($session_data['Full_Name']) ?></h4>
-                                    </div>
+                                        </tbody>
+                                    </table>
                                 </div>
-                                
-                                <div class="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-100">
-                                    <p class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-3 border-b border-slate-200 pb-2">Items Requested</p>
-                                    <div class="space-y-2">
-                                        <?php foreach ($borrowedItems as $item): ?>
-                                            <div class="flex justify-between text-xs font-bold text-slate-700">
-                                                <span><?= htmlspecialchars($item['Item_Name']) ?></span>
-                                                <span class="text-blue-600">x<?= $item['Quantity'] ?></span>
-                                            </div>
-                                        <?php endforeach; ?>
-                                    </div>
-                                </div>
-
-                                <?php if ($session_data['Status'] == 'Approved' || $session_data['Status'] == 'Pending'): ?>
-                                    <form method="POST">
-                                        <input type="hidden" name="sid" value="<?= $session_data['SessionID'] ?>">
-                                        <button type="submit" name="action_issue" class="w-full bg-[#0f172a] text-white py-4 rounded-xl font-black uppercase text-[10px] tracking-[0.2em] hover:bg-blue-600 transition-all shadow-lg">
-                                            Release Apparatus
-                                        </button>
-                                    </form>
-
-                                <?php elseif ($session_data['Status'] == 'Issued'): ?>
-                                    <div class="space-y-3">
-                                        <form method="POST" id="quickReturnForm">
-                                            <input type="hidden" name="sid" value="<?= $session_data['SessionID'] ?>">
-                                            <input type="hidden" name="action_return" value="1">
-                                            <button type="button" onclick="confirmQuickReturn()" class="w-full bg-indigo-600 text-white py-4 rounded-xl font-black uppercase text-[10px] tracking-[0.2em] hover:bg-[#0f172a] transition-all shadow-lg hover:shadow-xl">
-                                                Return All (Clean)
-                                            </button>
+                                <!-- Pagination Controls -->
+                                <div class="p-6 border-t border-gray-100 flex justify-between items-center">
+                                    <div class="flex items-center gap-4">
+                                        <p class="text-xs font-bold text-gray-500">Page <?= $page ?> of <?= $total_pages ?></p>
+                                        <form method="GET" action="handover.php" class="flex items-center gap-2">
+                                            <input type="hidden" name="search" value="<?= htmlspecialchars($search) ?>">
+                                            <input type="hidden" name="class_filter" value="<?= htmlspecialchars($class_filter) ?>">
+                                            <input type="hidden" name="status_filter" value="<?= htmlspecialchars($status_filter) ?>">
+                                            <input type="hidden" name="date_sort" value="<?= htmlspecialchars($date_sort) ?>">
+                                            <select name="per_page" onchange="this.form.submit()" class="bg-gray-50 border-gray-200 rounded-md text-xs font-bold p-1 focus:ring-orange-500 focus:border-orange-500">
+                                                <option value="10" <?= $records_per_page == 10 ? 'selected' : '' ?>>10</option>
+                                                <option value="15" <?= $records_per_page == 15 ? 'selected' : '' ?>>15</option>
+                                                <option value="25" <?= $records_per_page == 25 ? 'selected' : '' ?>>25</option>
+                                                <option value="50" <?= $records_per_page == 50 ? 'selected' : '' ?>>50</option>
+                                            </select>
+                                            <label class="text-xs font-bold text-gray-500">per page</label>
                                         </form>
-                                        
-                                        <button onclick="openDamageModal()" class="w-full bg-red-50 text-red-600 py-4 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-red-600 hover:text-white transition-all">
-                                            Report Damage / Loss
-                                        </button>
                                     </div>
-                                <?php endif; ?>
-                            </div>
-                        <?php else: ?>
-                            <div class="h-64 flex flex-col items-center justify-center text-center text-slate-300 border-2 border-dashed border-slate-200 rounded-3xl">
-                                <span class="text-4xl mb-2">👈</span>
-                                <p class="text-xs font-bold uppercase">Select a Session</p>
-                            </div>
-                        <?php endif; ?>
-                    </div>
-                </div>
-
-                <form id="tableSelectForm" method="POST" class="hidden">
-                    <input type="hidden" name="exact_session_id" id="table_session_id">
-                    <input type="hidden" name="find_slip" value="1">
-                </form>
-
-                <div id="damageModal" class="fixed inset-0 bg-[#0f172a]/95 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-                    <div class="bg-white w-full max-w-4xl rounded-[2.5rem] p-10 relative animate-reveal shadow-2xl overflow-y-auto max-h-[90vh]">
-                        <button onclick="closeDamageModal()" class="absolute top-8 right-8 text-slate-300 hover:text-slate-900 text-2xl transition-colors">&times;</button>
-                        
-                        <h3 class="text-3xl font-black text-red-600 uppercase italic mb-1">Report Issue</h3>
-                        <p class="text-[10px] text-slate-400 font-black uppercase tracking-widest mb-8">Please specify items that are damaged, lost, or dirty.</p>
-                        
-                        <form method="POST" id="damageForm" enctype="multipart/form-data">
-                            <input type="hidden" name="sid" value="<?= $session_data['SessionID'] ?? '' ?>">
-                            <input type="hidden" name="action_return" value="1">
-                            <input type="hidden" name="return_data" id="return_data_input">
-
-                            <div class="space-y-4 mb-8" id="modal_items_container">
+                                    <div class="flex gap-2">
+                                        <?php
+                                            $queryParams = ['search' => $search, 'class_filter' => $class_filter, 'status_filter' => $status_filter, 'per_page' => $records_per_page, 'date_sort' => $date_sort];
+                                            $pagination_query_string = http_build_query(array_filter($queryParams));
+                                        ?>
+                                        <a href="?page=<?= max(1, $page - 1) ?>&<?= $pagination_query_string ?>" class="px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-50 <?= $page <= 1 ? 'opacity-50 cursor-not-allowed' : '' ?>">Previous</a>
+                                        <a href="?page=<?= min($total_pages, $page + 1) ?>&<?= $pagination_query_string ?>" class="px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-50 <?= $page >= $total_pages ? 'opacity-50 cursor-not-allowed' : '' ?>">Next</a>
+                                    </div>
                                 </div>
+                            <?php endif; ?>
+                        </div>
 
-                            <button type="button" onclick="submitDamageReport()" class="w-full bg-red-600 text-white py-5 rounded-2xl font-black uppercase text-xs tracking-[0.2em] hover:bg-red-700 transition-all shadow-xl">
-                                Confirm & Log Damage
-                            </button>
-                        </form>
+                        <!-- State 2: Camera View -->
+                        <div id="camera-view" class="hidden p-6 flex-1 flex-col items-center justify-center">
+                            <div class="w-full max-w-lg mx-auto">
+                                <div class="flex justify-between items-center mb-4">
+                                    <h3 class="text-lg font-bold text-slate-800">Scan Requisition Slip QR</h3>
+                                    <button onclick="stopScanner()" class="text-sm font-bold text-slate-500 hover:text-red-500 transition-colors">Cancel Scan</button>
+                                </div>
+                                <div id="qr-scanner-container">
+                                    <div id="qr-reader"></div>
+                                    <div class="qr-guide-overlay">
+                                        <div class="qr-guide-box">
+                                            <div class="corner top-left"></div><div class="corner top-right"></div>
+                                            <div class="corner bottom-left"></div><div class="corner bottom-right"></div>
+                                        </div>
+                                        <div class="scan-laser"></div>
+                                    </div>
+                                </div>
+                                <div id="qr-reader-results" class="text-center text-sm font-bold text-red-500 mt-4 h-5"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
-
+                
+                <!-- Right Column (Details Panel) -->
+                <aside class="w-96 sticky-sidebar">
+                    <div id="receipt-panel-container" class="h-full">
+                        <div id="receipt-empty-state" class="h-full flex flex-col items-center justify-center text-center p-8 text-slate-400 border-2 border-dashed border-slate-200 rounded-3xl">
+                            <svg class="w-16 h-16 text-slate-300 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            <h3 class="font-bold text-slate-500">Select a Session</h3>
+                            <p class="text-sm mt-1">Click on a row to view its details here.</p>
+                        </div>
+                        <div id="receipt-content-wrapper" class="hidden h-full">
+                            <!-- JS will inject receipt content here -->
+                        </div>
+                    </div>
+                </aside>
             </main>
         </div>
     </div>
 
+    <!-- Generic Toast Container -->
+    <div id="toast-container" class="fixed bottom-10 right-10 z-[200] hidden items-center w-full max-w-xs p-4 space-x-4 text-white rounded-2xl shadow-2xl" role="alert">
+        <div id="toast-icon-container" class="inline-flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-xl"></div>
+        <div id="toast-message" class="text-sm font-bold"></div>
+    </div>
+
+    <!-- Audio cues for scanner -->
+    <audio id="scan-success-sound" src="../../assets/audio/scan_su.wav" preload="auto"></audio>
+    <audio id="scan-error-sound" src="../../assets/audio/scan_f.wav" preload="auto"></audio>
+
     <script>
-        // --- 1. TABLE CLICK HANDLER ---
-        function selectSession(sessionId) {
-            document.getElementById('table_session_id').value = sessionId;
-            document.getElementById('tableSelectForm').submit();
-        }
-
-        // --- 2. DATA FROM PHP ---
-        const borrowedItems = <?= json_encode($borrowedItems) ?>;
-        
-        // --- 3. SCANNER LOGIC ---
+        const allSessionsData = <?= json_encode($sessionsForJs, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
         let html5QrCode;
-        function toggleScanner() {
-            const wrapper = document.getElementById('scanner-wrapper');
-            const btn = document.getElementById('scanner-btn');
+
+        function closeReceiptPanel() {
+            document.getElementById('receipt-empty-state').classList.remove('hidden');
+            document.getElementById('receipt-content-wrapper').classList.add('hidden');
+            document.getElementById('receipt-content-wrapper').innerHTML = '';
+
+            const activeRow = document.querySelector('tr.bg-orange-100');
+            if (activeRow) {
+                activeRow.classList.remove('bg-orange-100');
+            }
+        }
+
+        function showReceipt(sessionData) {
+            // Highlight the selected row
+            const allRows = document.querySelectorAll('#pending-requests-table tr');
+            allRows.forEach(row => row.classList.remove('bg-orange-100'));
+            const selectedRow = document.getElementById(`row-${sessionData.SessionID}`);
+            if (selectedRow) {
+                selectedRow.classList.add('bg-orange-100');
+            }
+
+            const receiptWrapper = document.getElementById('receipt-content-wrapper');
+            const emptyState = document.getElementById('receipt-empty-state');
             
-            if (wrapper.classList.contains('hidden')) {
-                wrapper.classList.remove('hidden');
-                btn.innerText = "Stop Camera";
-                btn.classList.replace('bg-blue-50', 'bg-red-50');
-                btn.classList.replace('text-blue-600', 'text-red-600');
-                startScanner();
-            } else {
-                stopScanner();
-                wrapper.classList.add('hidden');
-                btn.innerText = "Start Camera";
-                btn.classList.replace('bg-red-50', 'bg-blue-50');
-                btn.classList.replace('text-red-600', 'text-blue-600');
-            }
-        }
-        function startScanner() {
-            html5QrCode = new Html5Qrcode("reader");
-            html5QrCode.start(
-                { facingMode: "environment" }, 
-                { fps: 10, qrbox: 250 },
-                (decodedText) => {
-                    document.getElementById('search_input').value = decodedText;
-                    stopScanner();
-                    document.getElementById('searchForm').submit();
-                }
-            ).catch(err => console.error(err));
-        }
-        function stopScanner() {
-            if (html5QrCode) {
-                html5QrCode.stop().then(() => {
-                    document.getElementById('scanner-wrapper').classList.add('hidden');
-                }).catch(err => console.warn(err));
-            }
-        }
+            const consumables = sessionData.items.filter(item => item.is_consumable == 1);
+            const nonConsumables = sessionData.items.filter(item => item.is_consumable == 0);
 
-        // --- 4. RETURN LOGIC ---
-        function confirmQuickReturn() {
-            if(confirm("Are you sure all items are returned in good condition?")) {
-                document.getElementById('quickReturnForm').submit();
-            }
-        }
+            let itemsHtml = '';
 
-        function openDamageModal() {
-            const container = document.getElementById('modal_items_container');
-            container.innerHTML = ''; 
-
-            borrowedItems.forEach((item) => {
-                const html = `
-                    <div class="bg-slate-50 p-6 rounded-2xl border border-slate-100 flex flex-col gap-4">
-                        <div class="flex justify-between items-center">
-                            <div>
-                                <p class="text-xs font-black text-slate-800 uppercase italic">${item.Item_Name}</p>
-                                <p class="text-[10px] text-blue-600 font-bold">Borrowed: ${item.Quantity}</p>
-                            </div>
-                        </div>
-                        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
-                            <div>
-                                <label class="text-[9px] font-black text-slate-400 uppercase mb-1">Qty Damaged</label>
-                                <input type="number" id="dmg_${item.ItemID}" min="0" max="${item.Quantity}" value="0" 
-                                       class="w-full bg-white border border-slate-200 p-2 rounded-xl font-bold outline-none focus:border-red-500">
-                            </div>
-                            <div>
-                                <label class="text-[9px] font-black text-slate-400 uppercase mb-1">Issue Type</label>
-                                <select id="type_${item.ItemID}" class="w-full bg-white border border-slate-200 p-2 rounded-xl text-xs font-bold text-slate-700 outline-none focus:border-red-500">
-                                    <option value="Broken">Broken</option>
-                                    <option value="Lost">Lost</option>
-                                    <option value="Dirty">Dirty</option>
-                                    <option value="Malfunction">Malfunction</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="text-[9px] font-black text-slate-400 uppercase mb-1">Evidence</label>
-                                <input type="file" name="evidence_${item.ItemID}" class="w-full text-[9px]">
-                            </div>
-                        </div>
-                        <div>
-                            <input type="text" id="note_${item.ItemID}" placeholder="Briefly describe damage..." 
-                                   class="w-full bg-white border border-slate-200 p-2 rounded-xl text-xs outline-none focus:border-red-500">
-                        </div>
+            if (nonConsumables.length > 0) {
+                itemsHtml += '<div class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 mt-2">Non-Consumables</div>';
+                itemsHtml += nonConsumables.map(item => {
+                    const size = item.Size_Value ? ` (${item.Size_Value}${item.Unit || ''})` : '';
+                    return `
+                    <div class="flex justify-between text-[10px] font-bold py-1 border-b border-dashed border-slate-200">
+                        <span class="uppercase">${item.name}${size}</span>
+                        <span>${item.qty}</span>
                     </div>`;
-                container.insertAdjacentHTML('beforeend', html);
-            });
-            document.getElementById('damageModal').classList.remove('hidden');
+                }).join('');
+            }
+
+            if (consumables.length > 0) {
+                itemsHtml += '<div class="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 mt-4">Consumables</div>';
+                itemsHtml += consumables.map(item => {
+                    const size = item.Size_Value ? ` (${item.Size_Value}${item.Unit || ''})` : '';
+                    return `
+                    <div class="flex justify-between text-[10px] font-bold py-1 border-b border-dashed border-slate-200">
+                        <span class="uppercase">${item.name}${size}</span>
+                        <span>${item.qty}</span>
+                    </div>`;
+                }).join('');
+            }
+            let buttonsHtml = '';
+            const sid = sessionData.SessionID;
+
+            if (sessionData.Status === 'Pending') {
+                buttonsHtml = `
+                    <a href="?action=reject&sid=${sid}" class="w-full text-center rounded-lg bg-white border border-red-200 px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-50 transition-colors">
+                        Reject
+                    </a>
+                    <a href="?action=approve&sid=${sid}" class="w-full text-center rounded-lg bg-orange-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/20 hover:bg-orange-600 transition-all">
+                        Approve
+                    </a>
+                `;
+            } else if (sessionData.Status === 'Approved') {
+                buttonsHtml = `
+                    <a href="?action=issue&sid=${sid}" class="w-full text-center rounded-lg bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 transition-all">
+                        Confirm Handover
+                    </a>
+                `;
+            } else if (sessionData.Status === 'Issued') {
+                buttonsHtml = `
+                    <a href="process_return.php?sid=${sid}" class="w-full text-center rounded-lg bg-blue-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all">
+                        Process Return
+                    </a>
+                `;
+            } else {
+                buttonsHtml = `
+                    <button onclick="closeReceiptPanel()" class="w-full col-span-2 text-center rounded-lg bg-slate-200 px-4 py-3 text-sm font-bold text-slate-600 hover:bg-slate-300 transition-colors">
+                        Close
+                    </button>
+                `;
+            }
+
+            let footerHtml = '';
+            if (buttonsHtml.trim() !== '') {
+                footerHtml = `
+                    <div class="p-6 mt-auto border-t-2 border-dashed border-slate-300 bg-white flex-shrink-0 z-10 thermal-font">
+                        <div class="grid ${sessionData.Status === 'Pending' ? 'grid-cols-2' : 'grid-cols-1'} gap-4">
+                            ${buttonsHtml}
+                        </div>
+                    </div>
+                `;
+            }
+
+            const receiptContent = `
+                <div class="text-center mb-6 border-b-2 border-black/10 pb-4">
+                    <h4 class="text-xl font-bold uppercase tracking-widest">CSM LAB</h4>
+                    <p class="text-[9px] uppercase mt-1 text-slate-500">Requisition Slip</p>
+                </div>
+
+                <div class="space-y-1 mb-6 text-[10px] uppercase font-bold">
+                    <div class="flex justify-between"><span>Student:</span><span>${sessionData.studentName}</span></div>
+                    <div class="flex justify-between"><span>ID:</span><span>${sessionData.studentId}</span></div>
+                    <div class="flex justify-between"><span>Date:</span><span>${new Date(sessionData.date).toLocaleString()}</span></div>
+                    <div class="flex justify-between items-start"><span>Activity:</span><span class="text-right w-1/2 truncate">${sessionData.activityTitle}</span></div>
+                    <div class="flex justify-between"><span>Session:</span><span>#${sessionData.sessionId}</span></div>
+                </div>
+
+                <div class="mb-6">
+                    <div class="flex justify-between text-xs font-bold border-b border-dashed border-black mb-2 pb-1">
+                        <span>ITEM</span>
+                        <span>QTY</span>
+                    </div>
+                    <div class="space-y-1" id="receipt-items">
+                        ${itemsHtml}
+                    </div>
+                </div>
+
+                <div class="mt-auto pt-4 text-center text-xs text-slate-500">
+                    *** ${sessionData.Status.toUpperCase()} ***
+                </div>
+            `;
+
+            const finalHtml = `
+                <div id="receipt-capture" class="receipt-container thermal-font bg-white rounded-2xl shadow-xl border border-slate-200/50 h-full flex flex-col animate__animated animate__fadeIn animate__faster">
+                    <div class="receipt-tear-top"></div>
+                    <div class="p-6 flex-1 overflow-y-auto custom-scrollbar flex flex-col">
+                        ${receiptContent}
+                    </div>
+                    ${footerHtml}
+                    <div class="receipt-tear-bottom"></div>
+                </div>
+            `;
+
+            receiptWrapper.innerHTML = finalHtml;
+            emptyState.classList.add('hidden');
+            receiptWrapper.classList.remove('hidden');
         }
 
-        function closeDamageModal() {
-            document.getElementById('damageModal').classList.add('hidden');
-        }
+        function startScanner() {
+            document.getElementById('table-view').classList.add('hidden');
+            const cameraView = document.getElementById('camera-view');
+            cameraView.classList.remove('hidden');
+            cameraView.classList.add('flex');
 
-        function submitDamageReport() {
-            const data = [];
-            let hasError = false;
+            // Only create a new instance if one doesn't exist
+            if (!html5QrCode) {
+                html5QrCode = new Html5Qrcode("qr-reader");
+            }
 
-            borrowedItems.forEach(item => {
-                const dmgInput = document.getElementById(`dmg_${item.ItemID}`);
-                const typeInput = document.getElementById(`type_${item.ItemID}`);
-                const noteInput = document.getElementById(`note_${item.ItemID}`);
-                const qtyDamaged = parseInt(dmgInput.value) || 0;
-                
-                if (qtyDamaged > parseInt(item.Quantity)) {
-                    alert(`Error: More damages than borrowed for ${item.Item_Name}`);
-                    hasError = true;
+            const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+                // The decoded text is the full QR_Code_Data string.
+                // We need to find the session that has this QR data.
+                const sessionArray = Object.values(allSessionsData);
+                const foundSession = sessionArray.find(session => session.QR_Code_Data === decodedText);
+
+                if (foundSession) {
+                    document.getElementById('scan-success-sound').play();
+                    // We found the session, now show its details.
+                    showReceipt(foundSession);
+                    stopScanner();
+                    
+                    // Optional: scroll to the row for better UX
+                    const row = document.getElementById(`row-${foundSession.SessionID}`);
+                    if (row) {
+                        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                } else {
+                    document.getElementById('scan-error-sound').play();
+                    const scannerContainer = document.getElementById('qr-scanner-container');
+                    scannerContainer.classList.add('shake-error');
+                    setTimeout(() => scannerContainer.classList.remove('shake-error'), 820);
+                    // The QR code was scanned, but it doesn't match any session in the current list.
+                    document.getElementById('qr-reader-results').innerText = `QR Code not found. Try clearing filters.`;
                 }
+            };
 
-                if (qtyDamaged > 0) {
-                    data.push({
-                        item_id: item.ItemID,
-                        qty: qtyDamaged,
-                        type: typeInput.value,
-                        notes: noteInput.value
-                    });
-                }
-            });
+            // We remove qrbox from the config. The library will use the full video feed,
+            // and our custom CSS overlay will provide the visual guide, which is more reliable
+            // and stylable than the library's built-in box.
+            const config = { fps: 10 };
 
-            if(hasError) return;
-            if (data.length === 0 && !confirm("No damages specified. Proceed as clean return?")) return;
-
-            document.getElementById('return_data_input').value = JSON.stringify(data);
-            document.getElementById('damageForm').submit();
+            // Start scanning. Prefer the back camera.
+            html5QrCode.start({ facingMode: "environment" }, config, qrCodeSuccessCallback)
+                .catch(err => {
+                    console.error("Unable to start scanning.", err);
+                    document.getElementById('qr-reader-results').innerText = "Error: Could not access camera.";
+                });
         }
+
+        function stopScanner() {
+            if (html5QrCode && html5QrCode.isScanning) {
+                html5QrCode.stop().catch(err => console.error("Failed to stop scanner.", err));
+            }
+            const cameraView = document.getElementById('camera-view');
+            cameraView.classList.add('hidden');
+            cameraView.classList.remove('flex');
+            document.getElementById('table-view').classList.remove('hidden');
+            document.getElementById('qr-reader-results').innerText = '';
+        }
+
+        <?php
+        if (isset($_SESSION['toast_message'])) {
+            $toast = $_SESSION['toast_message'];
+            unset($_SESSION['toast_message']);
+            echo "document.addEventListener('DOMContentLoaded', () => showToast('" . addslashes($toast['text']) . "', '" . $toast['type'] . "'));";
+        }
+        ?>
     </script>
+     <?php include '../../includes/layout_footer.php'; ?>   
 </body>
 </html>

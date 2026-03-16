@@ -3,7 +3,7 @@ session_start();
 require_once '../../dbRelated/operation.php';
 
 // 1. Access Control
-if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'Teacher') {
+if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] !== 'Teacher' && $_SESSION['user_role'] !== 'Admin')) {
     header("Location: ../../index.php");
     exit();
 }
@@ -34,9 +34,21 @@ if ($isGroupActivity) {
 
 // Helper for date comparison
 $deadline = $activity['Deadline'];
-?>
+$deadlineTime = strtotime($deadline);
 
-<?php include 'submission_list.php'; ?>
+// Post-process to add isLate flag
+foreach ($listItems as &$item) {
+    $isLate = false;
+    if (!empty($item['SubmissionDate'])) {
+        $submitTime = strtotime($item['SubmissionDate']);
+        if ($submitTime > $deadlineTime) {
+            $isLate = true;
+        }
+    }
+    $item['isLate'] = $isLate;
+}
+unset($item); // Unset reference
+?>
 
 <!DOCTYPE html>
 <html lang="en">
@@ -44,6 +56,7 @@ $deadline = $activity['Deadline'];
     <meta charset="UTF-8">
     <title>Review: <?= $activity['Title'] ?> | SNHS</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link rel="stylesheet" href="../../assets/css/style.css">
 </head>
 <body class="bg-[#f8fafc] min-h-screen">
@@ -52,16 +65,12 @@ $deadline = $activity['Deadline'];
         <div class="flex-1 flex flex-col">
             <?php include '../../includes/glass_header.php'; ?>
             
-            <main class="p-8 flex flex-col lg:flex-row gap-8">
-                <div class="flex-1">
+            <main class="p-8 flex flex-col lg:grid lg:grid-cols-3 gap-8 animate-reveal">
+                <div class="lg:col-span-2">
                     <header class="mb-8">
-                        <a href="class_activities.php?class_id=<?= $activity['ClassID'] ?>" class="group inline-flex items-center text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4">
-                            <svg class="w-4 h-4 mr-2 transform group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
-                            Back to Class
-                        </a>
                         <div class="flex justify-between items-start">
                             <h2 class="text-4xl font-black text-slate-900 uppercase italic tracking-tighter">
-                                <span class="block text-xs font-medium text-blue-500 not-italic tracking-normal mb-1">
+                                <span class="block text-xs font-medium text-orange-500 not-italic tracking-normal mb-1">
                                     <?= $isGroupActivity ? 'Group Activity' : 'Individual Activity' ?>
                                 </span>
                                 <?= htmlspecialchars($activity['Title']) ?>
@@ -73,8 +82,8 @@ $deadline = $activity['Deadline'];
                         </div>
                     </header>
                     
-                    <div class="glass-card p-10 border-t-8 border-blue-600">
-                        <h4 class="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-4 italic">Lab Description & Instructions</h4>
+                    <div class="bg-white p-10 rounded-3xl border border-slate-200/50 shadow-lg">
+                        <h4 class="text-[10px] font-black text-orange-500 uppercase tracking-widest mb-4 italic">Lab Description & Instructions</h4>
                         <p class="text-slate-600 text-sm leading-relaxed mb-8"><?= nl2br(htmlspecialchars($activity['Description'])) ?></p>
                         
                         <?php if($activity['Manual_URL']): ?>
@@ -83,7 +92,7 @@ $deadline = $activity['Deadline'];
                                     <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                                     Preview
                                 </button>
-                                <a href="../../<?= $activity['Manual_URL'] ?>" target="_blank" class="inline-flex items-center bg-slate-100 text-slate-700 px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all shadow-sm">
+                                <a href="../../<?= $activity['Manual_URL'] ?>" target="_blank" class="inline-flex items-center bg-slate-100 text-slate-700 px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-orange-600 hover:text-white transition-all shadow-sm">
                                     Download Reference
                                 </a>
                             </div>
@@ -94,8 +103,8 @@ $deadline = $activity['Deadline'];
                     </div>
                 </div>
 
-                <aside class="w-full lg:w-96">
-                    <div class="glass-card p-6 border-t-8 border-slate-900 shadow-xl sticky top-8">
+                <aside class="w-full lg:col-span-1">
+                    <div x-data="activityHub(<?= htmlspecialchars(json_encode(array_map('array_change_key_case', $listItems)), ENT_QUOTES, 'UTF-8') ?>)" class="bg-white p-6 rounded-3xl border border-slate-200/50 shadow-lg sticky top-24">
                         <div class="flex items-center justify-between mb-6">
                             <h3 class="font-black text-slate-800 uppercase italic text-xs tracking-widest">
                                 <?= $isGroupActivity ? 'Teams' : 'Enrollment' ?>
@@ -105,78 +114,86 @@ $deadline = $activity['Deadline'];
                             </span>
                         </div>
 
-                        <div class="space-y-3">
-                            <?php foreach ($listItems as $item): 
-                                $status = $item['Status'] ?? 'Unsubmitted';
-                                $isGraded = ($status === 'Graded');
-                                $isSubmitted = ($status === 'Submitted');
-                                
-                                // Late Calculation
-                                $isLate = false;
-                                if (($isSubmitted || $isGraded) && isset($item['SubmissionDate'])) {
-                                    $submitTime = strtotime($item['SubmissionDate']);
-                                    $deadlineTime = strtotime($deadline);
-                                    if ($submitTime > $deadlineTime) { $isLate = true; }
-                                }
-                                $item['isLate'] = $isLate;
-                            ?>
-
+                        <div class="space-y-3 max-h-[65vh] overflow-y-auto custom-scrollbar pr-2">
+                            <template x-for="item in paginatedItems" :key="item.groupid || item.masterid" x-cloak>
+                                <div>
                                 <?php if ($isGroupActivity): ?>
-                                    <div class="w-full p-4 rounded-2xl border transition-all bg-white border-slate-100 relative group">
-                                        <div class="flex justify-between items-start mb-3">
-                                            <div>
-                                                <h4 class="text-sm font-black text-slate-800 uppercase italic"><?= htmlspecialchars($item['GroupName']) ?></h4>
-                                                <p class="text-[9px] font-bold uppercase text-slate-400 mt-1"><?= count($item['Members'] ?? []) ?> Members</p>
+                                    <div class="bg-white border border-slate-100 rounded-2xl transition-all duration-300" :class="{'ring-2 ring-orange-400 shadow-md': expandedGroupId === item.groupid }">
+                                        <button @click="expandedGroupId = (expandedGroupId === item.groupid ? null : item.groupid)" class="w-full text-left p-4 focus:outline-none">
+                                            <div class="flex justify-between items-start mb-3">
+                                                <div>
+                                                    <h4 class="text-sm font-black text-slate-800 uppercase italic" x-text="item.groupname"></h4>
+                                                    <p class="text-[9px] font-bold uppercase text-slate-400 mt-1"><span x-text="item.members ? item.members.length : 0"></span> Members</p>
+                                                </div>
+                                                <template x-if="item.status && item.status.toLowerCase() === 'graded'">
+                                                    <span class="text-[10px] font-black bg-orange-600 text-white px-2 py-1 rounded" x-text="'Avg: ' + item.grade"></span>
+                                                </template>
+                                                <template x-if="item.status && item.status.toLowerCase() === 'submitted'">
+                                                    <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+                                                </template>
                                             </div>
-                                            <?php if($isGraded): ?>
-                                                <span class="text-[10px] font-black bg-blue-600 text-white px-2 py-1 rounded">Avg: <?= $item['Grade'] ?></span>
-                                            <?php elseif($isSubmitted): ?>
-                                                <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                                            <?php endif; ?>
-                                        </div>
 
-                                        <div class="flex gap-2 mt-2">
-                                           <button onclick='openRoster(<?= htmlspecialchars(json_encode($item['Members'] ?? []), ENT_QUOTES, 'UTF-8') ?>, "<?= htmlspecialchars($item['GroupName'], ENT_QUOTES) ?>")' 
-    class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-2 rounded-lg text-[9px] font-black uppercase tracking-wider transition-colors">
-    Roster
-</button>
-                                            <a href="grading_view.php?group_id=<?= $item['GroupID'] ?>&activity_id=<?= $activity_id ?>&mode=progress" 
-   class="flex-1 bg-blue-50 hover:bg-blue-100 text-blue-600 py-2 rounded-lg text-[9px] font-black uppercase tracking-wider transition-colors text-center inline-block">
-   Grade
-</a>
+                                            <div class="flex gap-2 mt-2">
+                                                <span class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-600 py-2 rounded-lg text-[9px] font-black uppercase tracking-wider transition-colors text-center">
+                                                    Roster
+                                                </span>
+                                            </div>
+                                        </button>
+                                        <!-- Roster Accordion -->
+                                        <div x-show="expandedGroupId === item.groupid" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0 -translate-y-2" x-transition:leave="transition ease-in duration-150" x-transition:leave-end="opacity-0 -translate-y-2" class="p-4 border-t border-slate-100 bg-slate-50/50 rounded-b-2xl" x-cloak>
+                                            <h5 class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Team Roster</h5>
+                                            <div class="space-y-2">
+                                                <template x-for="member in item.members" :key="member.name">
+                                                    <div class="flex items-center gap-3 p-2 rounded-lg" :class="member.role == 1 ? 'bg-amber-100/50' : ''">
+                                                        <div class="w-6 h-6 rounded-full flex items-center justify-center text-sm" :class="member.role == 1 ? 'bg-amber-400 text-white' : 'bg-slate-200 text-slate-500'">
+                                                            <span x-text="member.role == 1 ? '👑' : '👤'"></span>
+                                                        </div>
+                                                        <p class="text-xs font-bold text-slate-700" x-text="member.name"></p>
+                                                    </div>
+                                                </template>
+                                            </div>
                                         </div>
                                     </div>
 
                                 <?php else: ?>
-                                    <button onclick='openGrader(<?= json_encode($item) ?>)' 
-                                            class="w-full text-left p-4 rounded-2xl border transition-all flex items-center justify-between group 
-                                            <?= $isGraded ? 'bg-blue-50 border-blue-100' : ($isSubmitted ? 'bg-emerald-50 border-emerald-100' : 'bg-white border-slate-100 opacity-60 hover:opacity-100') ?>">
+                                    <div class="w-full text-left p-4 rounded-2xl border transition-all flex items-center justify-between"
+                                            :class="item.status && item.status.toLowerCase() === 'graded' ? 'bg-orange-50 border-orange-100' : (item.status && item.status.toLowerCase() === 'submitted' ? 'bg-emerald-50 border-emerald-100' : 'bg-white border-slate-100 opacity-60')">
                                             
                                         <div class="truncate mr-4 flex-1">
                                             <div class="flex items-center gap-2">
-                                                <p class="text-[10px] font-black text-slate-800 uppercase italic truncate group-hover:text-blue-600"><?= htmlspecialchars($item['Full_Name']) ?></p>
-                                                <?php if($isLate): ?>
+                                                <p class="text-[10px] font-black text-slate-800 uppercase italic truncate" x-text="item.full_name"></p>
+                                                <template x-if="item.islate === true">
                                                     <span class="text-[8px] font-black text-red-500 bg-red-100 px-1.5 py-0.5 rounded">LATE</span>
-                                                <?php endif; ?>
+                                                </template>
                                             </div>
-                                            <p class="text-[8px] font-bold uppercase <?= $isSubmitted || $isGraded ? 'text-blue-500' : 'text-slate-300' ?>">
-                                                <?= $status ?>
+                                            <p class="text-[8px] font-bold uppercase" :class="(item.status && (item.status.toLowerCase() === 'submitted' || item.status.toLowerCase() === 'graded')) ? 'text-orange-500' : 'text-slate-300'" x-text="item.status || 'Unsubmitted'">
                                             </p>
                                         </div>
 
                                         <div class="flex items-center gap-2 flex-shrink-0">
-                                            <?php if($isGraded): ?>
-                                                <span class="text-[10px] font-black bg-blue-600 text-white px-3 py-1 rounded-lg">
-                                                    <?= $item['Grade'] ?>
+                                            <template x-if="item.status && item.status.toLowerCase() === 'graded'">
+                                                <span class="text-[10px] font-black bg-orange-600 text-white px-3 py-1 rounded-lg" x-text="item.grade">
                                                 </span>
-                                            <?php elseif($isSubmitted): ?>
+                                            </template>
+                                            <template x-if="item.status && item.status.toLowerCase() === 'submitted'">
                                                 <div class="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                                            <?php endif; ?>
+                                            </template>
                                         </div>
-                                    </button>
+                                    </div>
                                 <?php endif; ?>
+                                </div>
+                            </template>
+                        </div>
 
-                            <?php endforeach; ?>
+                        <!-- Pagination Controls -->
+                        <div x-show="totalPages > 1" class="mt-6 pt-4 border-t border-slate-100 flex justify-between items-center" x-cloak>
+                            <p class="text-xs font-bold text-gray-500">
+                                Page <span x-text="currentPage"></span> of <span x-text="totalPages"></span>
+                            </p>
+                            <div class="flex gap-2">
+                                <button @click="currentPage = Math.max(1, currentPage - 1)" :disabled="currentPage === 1" class="px-3 py-1.5 bg-white border border-gray-200 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">&larr; Prev</button>
+                                <button @click="currentPage = Math.min(totalPages, currentPage + 1)" :disabled="currentPage === totalPages" class="px-3 py-1.5 bg-white border border-gray-200 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">Next &rarr;</button>
+                            </div>
                         </div>
                     </div>
                 </aside>
@@ -184,159 +201,28 @@ $deadline = $activity['Deadline'];
         </div>
     </div>
 
-    <div id="graderModal" class="fixed inset-0 bg-[#0f172a]/90 backdrop-blur-md z-[100] hidden flex items-center justify-center p-6">
-        <div class="bg-white w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-[2.5rem] p-10 relative animate-reveal active shadow-2xl">
-            <button onclick="closeGrader()" class="absolute top-8 right-8 text-slate-300 hover:text-slate-900 text-2xl transition-colors">&times;</button>
-            
-            <div class="flex items-center gap-3 mb-1">
-                <h3 id="m_name" class="text-3xl font-black text-slate-900 uppercase italic">Student Name</h3>
-                <span id="m_late_badge" class="hidden text-[10px] font-black text-white bg-red-500 px-2 py-1 rounded-md uppercase tracking-wider">Late Submission</span>
-            </div>
-            <p class="text-[10px] text-blue-600 font-black uppercase tracking-widest mb-8">Performance Assessment</p>
-            
-            <form action="grade_handler.php" method="POST" class="space-y-6">
-                <input type="hidden" name="submission_id" id="m_sub_id">
-                <input type="hidden" name="activity_id" value="<?= $activity_id ?>">
-                
-                <div class="p-6 bg-slate-50 rounded-3xl border border-slate-100">
-                    <div class="flex justify-between items-center mb-4">
-                        <div>
-                            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Evidence / Attachment</p>
-                            <p id="m_file_name" class="text-xs font-bold text-slate-700 italic">Submission_File.pdf</p>
-                        </div>
-                        <div class="flex gap-2">
-                            <button type="button" onclick="toggleStudentPreview()" class="bg-slate-200 text-slate-700 font-black px-4 py-3 rounded-xl text-[10px] uppercase hover:bg-slate-300 transition-all">Preview</button>
-                            <a id="m_file" href="#" target="_blank" class="bg-white border border-slate-200 text-blue-600 font-black px-6 py-3 rounded-xl text-[10px] uppercase hover:bg-blue-600 hover:text-white transition-all shadow-sm">Download</a>
-                        </div>
-                    </div>
-                    <div id="student_preview_container" class="hidden border-t border-slate-200 pt-4 mt-4">
-                        <iframe id="student_preview_frame" class="w-full h-96 rounded-xl border border-slate-200 bg-white" src=""></iframe>
-                    </div>
-                </div>
-
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div>
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Numerical Grade (0-100)</label>
-                        <input type="number" name="grade" id="m_grade" min="0" max="100" required class="w-full bg-slate-50 p-5 rounded-2xl border-2 border-transparent focus:border-blue-600 transition-all font-black text-3xl text-blue-600 outline-none">
-                    </div>
-                    <div>
-                        <label class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 block">Feedback</label>
-                        <textarea name="feedback" id="m_feedback" class="w-full bg-slate-50 p-5 rounded-2xl border-2 border-transparent focus:border-blue-600 transition-all text-xs font-medium outline-none" rows="4" placeholder="How did they perform?"></textarea>
-                    </div>
-                </div>
-
-                <button type="submit" class="w-full bg-[#0f172a] text-white py-6 rounded-2xl font-black uppercase text-[10px] tracking-[0.2em] hover:bg-blue-600 transition-all shadow-xl active:scale-95">Save Grade and Notify</button>
-            </form>
-        </div>
-    </div>
-
-    <div id="rosterModal" class="fixed inset-0 bg-[#0f172a]/90 backdrop-blur-md z-[100] hidden flex items-center justify-center p-6">
-        <div class="bg-white w-full max-w-md rounded-[2.5rem] p-8 relative shadow-2xl animate-reveal">
-            <button onclick="closeRoster()" class="absolute top-6 right-6 text-slate-300 hover:text-slate-900 text-xl transition-colors">&times;</button>
-            
-            <h3 id="r_group_name" class="text-2xl font-black text-slate-900 uppercase italic mb-1">Group Name</h3>
-            <p class="text-[10px] text-blue-600 font-black uppercase tracking-widest mb-6">Team Roster</p>
-
-            <div id="r_members_list" class="space-y-3 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
-                </div>
-            
-            <div class="mt-6 pt-6 border-t border-slate-100">
-                <button onclick="closeRoster()" class="w-full bg-slate-100 text-slate-600 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-200">Close</button>
-            </div>
-        </div>
-    </div>
 <script>
         // Existing Toggles
         function toggleManualPreview() { document.getElementById('manual_preview_container').classList.toggle('hidden'); }
         function toggleStudentPreview() { document.getElementById('student_preview_container').classList.toggle('hidden'); }
 
-        // Grader Logic (Unchanged)
-        function openGrader(stu) {
-            if(!stu.SubmissionID) { alert(stu.Full_Name + " has not submitted this activity yet."); return; }
-            document.getElementById('student_preview_container').classList.add('hidden');
-            document.getElementById('student_preview_frame').src = "";
-            document.getElementById('m_name').innerText = stu.Full_Name;
-            document.getElementById('m_sub_id').value = stu.SubmissionID;
-            document.getElementById('m_grade').value = stu.Grade || '';
-            document.getElementById('m_feedback').value = stu.Feedback || '';
-            
-            const lateBadge = document.getElementById('m_late_badge');
-            stu.isLate ? lateBadge.classList.remove('hidden') : lateBadge.classList.add('hidden');
-
-            const fileUrl = "../../" + stu.Report_URL;
-            document.getElementById('m_file').href = fileUrl;
-            document.getElementById('student_preview_frame').src = fileUrl;
-            document.getElementById('m_file_name').innerText = stu.Report_URL.split('/').pop();
-            document.getElementById('graderModal').classList.remove('hidden');
-        }
-
-        function closeGrader() { 
-            document.getElementById('graderModal').classList.add('hidden');
-            document.getElementById('student_preview_frame').src = "";
-        }
-// ==========================================
-        // 🛠️ FIXED: DATA-TYPE AWARE ROSTER
-        // ==========================================
-        function openRoster(members, groupName) {
-            console.log("Roster Data:", members);
-
-            document.getElementById('r_group_name').innerText = groupName;
-            const container = document.getElementById('r_members_list');
-            container.innerHTML = ''; 
-
-            if (!members || members.length === 0) {
-                container.innerHTML = '<p class="text-xs text-slate-400 italic">No members found.</p>';
-            } else {
-                members.forEach(member => {
-                    let name = "Unknown";
-                    let isLeader = false;
-
-                    // 🔍 CHECK 1: Is it just a simple Text String? (e.g., "Mark Ando")
-                    if (typeof member === 'string') {
-                        name = member;
-                        isLeader = false; // Strings usually don't carry role info
-                    } 
-                    // 🔍 CHECK 2: Is it an Object? (e.g., {name: "Mark", role: 1})
-                    else if (typeof member === 'object' && member !== null) {
-                        // Try every possible key
-                        name = member.name || member.Full_Name || member.full_name || member[0] || "Unknown";
-                        
-                        // Check for Leader Role
-                        if (member.role == 1 || member.Role == 1 || member.is_leader == 1 || member.Is_Leader == 1) isLeader = true;
-                        if (member.role === 'Leader' || member.Role === 'Leader') isLeader = true;
-                    }
-
-                    // Render HTML
-                    const div = document.createElement('div');
-                    div.className = `flex items-center gap-3 p-3 rounded-xl border transition-all ${isLeader ? 'bg-amber-50 border-amber-200 shadow-sm' : 'bg-slate-50 border-slate-100'}`;
-                    
-                    div.innerHTML = `
-                        <div class="w-10 h-10 rounded-full flex items-center justify-center text-lg shadow-sm shrink-0 
-                            ${isLeader ? 'bg-amber-400 text-white ring-2 ring-amber-200' : 'bg-white text-slate-300'}">
-                            ${isLeader ? '👑' : '👤'}
-                        </div>
-                        <div>
-                            <p class="text-xs font-black ${isLeader ? 'text-slate-800' : 'text-slate-700'}">
-                                ${name}
-                            </p>
-                            <p class="text-[9px] font-bold uppercase tracking-widest ${isLeader ? 'text-amber-600' : 'text-slate-400'}">
-                                ${isLeader ? 'Team Leader' : 'Member'}
-                            </p>
-                        </div>
-                    `;
-                    container.appendChild(div);
-                });
+        function activityHub(items) {
+            return {
+                allItems: items,
+                currentPage: 1,
+                itemsPerPage: 5,
+                expandedGroupId: null,
+                get totalPages() {
+                    return Math.ceil(this.allItems.length / this.itemsPerPage);
+                },
+                get paginatedItems() {
+                    const start = (this.currentPage - 1) * this.itemsPerPage;
+                    const end = start + this.itemsPerPage;
+                    return this.allItems.slice(start, end);
+                }
             }
-            document.getElementById('rosterModal').classList.remove('hidden');
-        }
-        function closeRoster() {
-            document.getElementById('rosterModal').classList.add('hidden');
-        }
-
-        window.onclick = function(event) {
-            if (event.target == document.getElementById('graderModal')) closeGrader();
-            if (event.target == document.getElementById('rosterModal')) closeRoster();
         }
     </script>
+    <?php include '../../includes/layout_footer.php'; ?>
 </body>
 </html>

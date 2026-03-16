@@ -4,7 +4,29 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WMSU – CSM LabFlow | Modern Lab Management</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- OFFLINE TAILWIND -->
+    <link href="css/output.css" rel="stylesheet">
+
+    <!-- ONLINE TAILWIND (CDN) - Uncomment to use if offline build is missing
+    <script src="https://unpkg.com/@tailwindcss/browser@4"></script>
+    <style type="text/tailwindcss">
+        @theme {
+            --color-crimson: #dc143c;
+            --font-sans: "Plus Jakarta Sans", sans-serif;
+        }
+        @layer utilities {
+            .bg-crimson-gradient {
+                background-image: linear-gradient(135deg, #ff8c00 0%, #dc143c 100%);
+            }
+            .text-crimson-gradient {
+                background-image: linear-gradient(135deg, #ff8c00 0%, #dc143c 100%);
+                -webkit-background-clip: text;
+                background-clip: text;
+                color: transparent;
+            }
+        }
+    </style>
+    -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
     <link rel="icon" href="img/labflow.jpg">
@@ -19,13 +41,6 @@
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
         ::selection { background: #dc143c; color: white; }
 
-        .bg-crimson-gradient {
-            background: linear-gradient(135deg, #ff8c00 0%, #dc143c 100%);
-        }
-        
-        .text-crimson { color: #dc143c; }
-        .bg-crimson { background-color: #dc143c; }
-        
         .glass-card {
             background: rgba(255, 255, 255, 0.9);
             backdrop-filter: blur(12px);
@@ -600,7 +615,7 @@
                 <span class="text-crimson font-bold tracking-wider uppercase text-xs mb-2 block">System Advantages</span>
                 <h2 class="text-3xl md:text-5xl font-extrabold text-slate-900 mb-6">Why Choose <span class="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-crimson">LabFlow?</span></h2>
                 <p class="text-slate-500 max-w-2xl mx-auto text-lg">Built specifically for the academic needs of WMSU, replacing outdated manual logs with a secure, digital ecosystem.</p>
-            </div>
+           </div>
             
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <!-- Column 1: Upper Short, Lower Long -->
@@ -731,7 +746,7 @@
                                 <button onclick="selectDevice('linux')" id="dev-linux" class="device-btn p-4 rounded-2xl border-2 border-slate-100 hover:border-orange-200 hover:bg-orange-50 transition-all flex flex-col items-center gap-2 group">
                                     <svg class="w-8 h-8 text-slate-400 group-hover:text-orange-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 17l6-6-6-6m8 14h8"></path></svg>
                                     <span class="text-xs font-bold text-slate-600">Linux</span>
-                                </button>
+                                </button>\
                                 <button onclick="selectDevice('android')" id="dev-android" class="device-btn p-4 rounded-2xl border-2 border-slate-100 hover:border-orange-200 hover:bg-orange-50 transition-all flex flex-col items-center gap-2 group">
                                     <svg class="w-8 h-8 text-slate-400 group-hover:text-orange-500 transition-colors" fill="currentColor" viewBox="0 0 24 24"><path d="M17.523 15.3414c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993.0001.5511-.4482.9997-.9993.9997m-11.046 0c-.5511 0-.9993-.4486-.9993-.9997s.4482-.9993.9993-.9993c.5511 0 .9993.4482.9993.9993 0 .5511-.4482.9997-.9993.9997m11.4045-6.02l1.9973-3.4592a.416.416 0 00-.1521-.5676.416.416 0 00-.5676.1521l-2.0223 3.503C15.5902 8.4213 13.8533 8.0028 12 8.0028s-3.5902.4185-5.1367.9669L4.841 5.4667a.4161.4161 0 00-.5677-.1521.4157.4157 0 00-.1521.5676l1.9973 3.4592C2.6889 11.1867.3432 14.6589 0 18.761h24c-.3432-4.1021-2.6889-7.5743-6.1185-9.4396"/></svg>
                                     <span class="text-xs font-bold text-slate-600">Android</span>
@@ -1371,7 +1386,7 @@
             // Title & Description
             html += `<div class="mt-3 text-center sm:mt-5">`;
             if (flowState.step === 1) {
-                html += `<h3 class="text-xl font-bold leading-6 text-slate-900">E-LIMS Gatekeeper</h3><p class="mt-2 text-sm text-slate-500">Please verify your identity.</p>`;
+                html += `<h3 class="text-xl font-bold leading-6 text-slate-900">LabFlow Login</h3><p class="mt-2 text-sm text-slate-500">Please verify your identity.</p>`;
             } else if (flowState.step === 2) {
                 html += `<h3 class="text-xl font-bold leading-6 text-slate-900">Welcome Back</h3><p class="mt-2 text-sm text-slate-500">Login as <span class="font-bold text-slate-800">${flowState.user.name}</span></p>`;
             } else if (flowState.step === 3) {

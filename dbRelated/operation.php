@@ -6,8 +6,14 @@ class DataManager {
     public $db;
 
     public function __construct() {
-        $database = new Database();
-        $this->db = $database->getConnection();
+        try {
+            $database = new Database();
+            $this->db = $database->getConnection();
+            // The getConnection method now throws an exception on failure, so we don't need to check for a null return.
+        } catch (PDOException $e) {
+            // Catch the specific PDOException from db_connect and re-throw it to be handled by the AJAX script.
+            throw new Exception("Database Initialization Failed: " . $e->getMessage());
+        }
     }
 
     // --- AUTHENTICATION CORE ---
@@ -43,6 +49,8 @@ class DataManager {
     // Complete the registration process by saving the password and email
     public function finalizeRegistration($master_id, $email, $password) {
         try {
+            $this->db->beginTransaction();
+
             $hashed_password = password_hash($password, PASSWORD_DEFAULT);
             $query = "INSERT INTO users (MasterID, Confirmed_Email, Password_Hash, Is_Verified) 
                       VALUES (:mid, :email, :pass, 1)";
@@ -50,8 +58,17 @@ class DataManager {
             $stmt->bindParam(':mid', $master_id);
             $stmt->bindParam(':email', $email);
             $stmt->bindParam(':pass', $hashed_password);
-            return $stmt->execute();
+            $stmt->execute();
+
+            $updateQuery = "UPDATE lookup_masterlist SET is_verified = 1 WHERE MasterID = :mid";
+            $updateStmt = $this->db->prepare($updateQuery);
+            $updateStmt->bindParam(':mid', $master_id);
+            $updateStmt->execute();
+
+            $this->db->commit();
+            return true;
         } catch (PDOException $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
             error_log("Registration Error: " . $e->getMessage());
             return false;
         }
@@ -60,16 +77,34 @@ class DataManager {
     // Fetch all classes a specific student is currently enrolled in
     public function getStudentEnrolledClasses($studentUserID) {
         try {
-            $query = "SELECT c.*, m.Full_Name as TeacherName 
+            $query = "SELECT c.*, m.Full_Name as TeacherName, ce.ClearanceStatus,
+                             (SELECT COUNT(*) FROM activity_assignments aa WHERE aa.ClassID = c.ClassID) as ActivityCount
                       FROM class_enrollment ce
                       JOIN classes c ON ce.ClassID = c.ClassID
                       JOIN users u_teacher ON c.TeacherID = u_teacher.UserID
                       JOIN lookup_masterlist m ON u_teacher.MasterID = m.MasterID
                       JOIN users u_student ON ce.MasterID = u_student.MasterID
-                      WHERE u_student.UserID = :sid";
+                      WHERE u_student.UserID = :sid
+                      ORDER BY c.Class_Name ASC";
             $stmt = $this->db->prepare($query);
             $stmt->execute(['sid' => $studentUserID]);
-            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // For each class, fetch upcoming deadlines
+            $deadlineStmt = $this->db->prepare(
+                "SELECT la.Title, la.Deadline, la.ActivityID
+                 FROM lab_activities la
+                 JOIN activity_assignments aa ON la.ActivityID = aa.ActivityID
+                 WHERE aa.ClassID = :cid AND la.Deadline >= NOW()
+                 ORDER BY la.Deadline ASC
+                 LIMIT 3"
+            );
+            foreach ($classes as &$class) {
+                $deadlineStmt->execute(['cid' => $class['ClassID']]);
+                $class['upcoming_deadlines'] = $deadlineStmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+
+            return $classes;
         } catch (PDOException $e) {
             error_log("Student Dash Error: " . $e->getMessage());
             return [];
@@ -77,14 +112,24 @@ class DataManager {
     }
 
     // --- ADMIN INVENTORY MANAGEMENT ---
-
     // Create a new category for inventory items
-    public function addCategory($name) {
+    public function addCategory($name, $isConsumable = 0)
+    {
         try {
-            $query = "INSERT INTO categories (Category_Name) VALUES (:name)";
+            $query = "INSERT INTO categories (Category_Name, is_consumable) VALUES (:name, :is_consumable)";
             $stmt = $this->db->prepare($query);
-            return $stmt->execute([':name' => $name]);
-        } catch (PDOException $e) { return false; }
+            $stmt->bindValue(':name', $name, \PDO::PARAM_STR);
+            $stmt->bindValue(':is_consumable', (int) $isConsumable, \PDO::PARAM_INT);
+
+            if ($stmt->execute()) {
+                return $this->db->lastInsertId();
+            }
+
+            return false;
+        } catch (\PDOException $e) {
+            // error_log($e->getMessage()); // Optional: for server-side logging
+            return false;
+        }
     }
 
     // Fetch all available categories
@@ -95,31 +140,368 @@ class DataManager {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    // Fetch categories filtered by their nature (consumable or not)
+    public function getCategoriesByType($isConsumable) {
+        $query = "SELECT * FROM categories WHERE is_consumable = :is_consumable ORDER BY Category_Name ASC";
+        $stmt = $this->db->prepare($query);
+        $stmt->execute([':is_consumable' => $isConsumable]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     // Add a new item to the inventory
-    public function addItem($catId, $name, $qty, $location, $desc) {
-        $query = "INSERT INTO inventory (CategoryID, Item_Name, Total_Qty, Available_Qty, Location, Description) 
-                  VALUES (:cid, :name, :tqty, :aqty, :loc, :desc)";
+    public function addItem($catId, $name, $desc, $isConsumable, $isScalable, $qty = 0, $location = null, $unit = null) {
+        $query = "INSERT INTO inventory (CategoryID, Item_Name, Description, is_consumable, is_scalable, Total_Qty, Available_Qty, Location, Unit) 
+                  VALUES (:cid, :name, :desc, :consumable, :scalable, :tqty, :aqty, :loc, :unit)";
         $stmt = $this->db->prepare($query);
         $stmt->execute([
             'cid' => $catId,
             'name' => $name,
+            'desc' => $desc,
+            'consumable' => $isConsumable,
+            'scalable' => $isScalable,
             'tqty' => $qty,
             'aqty' => $qty, 
             'loc' => $location,
-            'desc' => $desc
+            'unit' => $unit
         ]);
         return $this->db->lastInsertId();
+    }
+
+    // Add a size variant for a scalable item
+    public function addVariant($itemId, $size, $unit, $qty) {
+        $query = "INSERT INTO item_variants (ItemID, Size_Value, Unit, Variant_Total_Qty, Variant_Available_Qty)
+                  VALUES (:itemId, :size, :unit, :qty, :qty)";
+        $stmt = $this->db->prepare($query);
+        return $stmt->execute([
+            'itemId' => $itemId,
+            'size' => $size,
+            'unit' => $unit,
+            'qty' => $qty
+        ]);
+    }
+
+    // Update the parent inventory item's total quantity based on its variants
+    public function updateInventoryTotalFromVariants($itemId) {
+        $query = "UPDATE inventory i SET
+                    i.Total_Qty = (SELECT SUM(iv.Variant_Total_Qty) FROM item_variants iv WHERE iv.ItemID = :itemId),
+                    i.Available_Qty = (SELECT SUM(iv.Variant_Available_Qty) FROM item_variants iv WHERE iv.ItemID = :itemId)
+                  WHERE i.ItemID = :itemId";
+        $stmt = $this->db->prepare($query);
+        return $stmt->execute(['itemId' => $itemId]);
+    }
+
+    /**
+     * Update an existing inventory item's details.
+     * This handles changes to name, description, location, and total quantity,
+     * while safely adjusting the available quantity.
+     * @param int $itemId The ID of the item to update.
+     * @param string $itemName The new name for the item.
+     * @param string $description The new description.
+     * @param string $location The new location.
+     * @param int $totalQty The new total quantity.
+     * @return bool True on success, false on failure.
+     */
+    public function updateInventoryItem($itemId, $itemName, $description, $location, $totalQty) {
+        try {
+            $this->db->beginTransaction();
+
+            // 1. Get current item state to calculate quantity difference
+            $stmt = $this->db->prepare("SELECT Total_Qty, Available_Qty FROM inventory WHERE ItemID = :id FOR UPDATE");
+            $stmt->execute([':id' => $itemId]);
+            $currentItem = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$currentItem) {
+                $this->db->rollBack();
+                return false; // Item not found
+            }
+
+            // 2. Calculate the difference and the new available quantity
+            $qtyDifference = $totalQty - (int)$currentItem['Total_Qty'];
+            $newAvailableQty = (int)$currentItem['Available_Qty'] + $qtyDifference;
+
+            // 3. Safety check: prevent available quantity from going negative
+            if ($newAvailableQty < 0) {
+                $this->lastError = "Update failed: New total quantity is less than the number of items currently borrowed.";
+                $this->db->rollBack();
+                return false;
+            }
+
+            // 4. Prepare and execute the UPDATE statement
+            $query = "UPDATE inventory SET Item_Name = :name, Description = :desc, Location = :loc, Total_Qty = :tqty, Available_Qty = :aqty WHERE ItemID = :id";
+            $updateStmt = $this->db->prepare($query);
+            $updateStmt->execute([':name' => $itemName, ':desc' => $description, ':loc' => $location, ':tqty' => $totalQty, ':aqty' => $newAvailableQty, ':id' => $itemId]);
+
+            $this->db->commit();
+            return $updateStmt->rowCount() > 0;
+        } catch (PDOException $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            error_log("Inventory Update Error: " . $e->getMessage());
+            $this->lastError = "A database error occurred during the update.";
+            return false;
+        }
+    }
+
+    /**
+     * Updates a scalable inventory item and its variants.
+     * @param int $itemId The ID of the parent item.
+     * @param string $itemName The new name for the item.
+     * @param string $description The new description.
+     * @param array $variantsData Data from the form about variants.
+     * @return bool True on success, false on failure.
+     */
+    public function updateScalableInventoryItem($itemId, $itemName, $description, $variantsData) {
+        try {
+            $this->db->beginTransaction();
+
+            // 1. Update parent item's text fields
+            $parentStmt = $this->db->prepare("UPDATE inventory SET Item_Name = :name, Description = :desc WHERE ItemID = :id");
+            $parentStmt->execute([':name' => $itemName, ':desc' => $description, ':id' => $itemId]);
+
+            // 2. Get all current variant IDs for this item from the DB
+            $stmt = $this->db->prepare("SELECT VariantID FROM item_variants WHERE ItemID = :id");
+            $stmt->execute([':id' => $itemId]);
+            $existingVariantIds = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            $submittedVariantIds = [];
+
+            // 3. Process submitted variants (update existing, insert new)
+            $updateStmt = $this->db->prepare("UPDATE item_variants SET Size_Value = :size, Unit = :unit, Variant_Total_Qty = :qty, Variant_Available_Qty = Variant_Available_Qty + (:qty - Variant_Total_Qty) WHERE VariantID = :vid");
+            $insertStmt = $this->db->prepare("INSERT INTO item_variants (ItemID, Size_Value, Unit, Variant_Total_Qty, Variant_Available_Qty) VALUES (:itemId, :size, :unit, :qty, :qty)");
+
+            foreach ($variantsData as $key => $variant) {
+                $size = trim($variant['size']);
+                $unit = trim($variant['unit']);
+                $qty = (int)$variant['qty'];
+
+                if (empty($size) && $qty == 0) continue; // Skip empty new rows
+
+                if (is_numeric($key)) { // Existing variant
+                    $variantId = (int)$key;
+                    $submittedVariantIds[] = $variantId;
+
+                    $checkStmt = $this->db->prepare("SELECT (Variant_Available_Qty + (:qty - Variant_Total_Qty)) as new_avail FROM item_variants WHERE VariantID = :vid FOR UPDATE");
+                    $checkStmt->execute([':qty' => $qty, ':vid' => $variantId]);
+                    if ($checkStmt->fetchColumn() < 0) {
+                        $this->lastError = "Update for size '{$size}{$unit}' failed: New total quantity is less than items currently borrowed.";
+                        $this->db->rollBack();
+                        return false;
+                    }
+                    $updateStmt->execute([':size' => $size, ':unit' => $unit, ':qty' => $qty, ':vid' => $variantId]);
+                } else { // New variant
+                    $insertStmt->execute([':itemId' => $itemId, ':size' => $size, ':unit' => $unit, ':qty' => $qty]);
+                }
+            }
+
+            // 4. Delete variants that were removed in the UI
+            $variantsToDelete = array_diff($existingVariantIds, $submittedVariantIds);
+            if (!empty($variantsToDelete)) {
+                $qMarks = str_repeat('?,', count($variantsToDelete) - 1) . '?';
+                $checkBorrowedStmt = $this->db->prepare("SELECT COUNT(*) FROM item_variants WHERE VariantID IN ($qMarks) AND Variant_Available_Qty < Variant_Total_Qty");
+                $checkBorrowedStmt->execute($variantsToDelete);
+                if ($checkBorrowedStmt->fetchColumn() > 0) {
+                     $this->lastError = "Cannot delete a size that has items currently borrowed.";
+                     $this->db->rollBack();
+                     return false;
+                }
+                $deleteStmt = $this->db->prepare("DELETE FROM item_variants WHERE VariantID IN ($qMarks)");
+                $deleteStmt->execute($variantsToDelete);
+            }
+
+            // 5. Recalculate and update parent inventory totals
+            $this->updateInventoryTotalFromVariants($itemId);
+
+            $this->db->commit();
+            return true;
+        } catch (PDOException $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            error_log("Scalable Inventory Update Error: " . $e->getMessage());
+            $this->lastError = "A database error occurred during the update.";
+            return false;
+        }
+    }
+
+    /**
+     * Deletes an inventory item and its variants if applicable.
+     * Checks for dependencies before deleting.
+     * @param int $itemId The ID of the item to delete.
+     * @return bool True on success, false on failure.
+     */
+    public function deleteInventoryItem($itemId) {
+        try {
+            $this->db->beginTransaction();
+
+            // 1. Get item details
+            $stmt = $this->db->prepare("SELECT is_scalable, Available_Qty, Total_Qty FROM inventory WHERE ItemID = :id FOR UPDATE");
+            $stmt->execute([':id' => $itemId]);
+            $item = $stmt->fetch(PDO::FETCH_ASSOC);
+
+            if (!$item) {
+                $this->lastError = "Item not found.";
+                $this->db->rollBack();
+                return false;
+            }
+
+            // 2. Check if item is a requirement for any lab activities
+            $checkActivity = $this->db->prepare("SELECT COUNT(*) FROM activity_requirements WHERE ItemID = :id");
+            $checkActivity->execute([':id' => $itemId]);
+            if ($checkActivity->fetchColumn() > 0) {
+                 $this->lastError = "Cannot delete item. It is required by one or more lab activities. Please remove it from the activities first.";
+                 $this->db->rollBack();
+                 return false;
+            }
+
+            // 3. Check if item is currently borrowed
+            if ($item['is_scalable'] == 1) {
+                // For scalable items, check if any variant has items borrowed
+                $variantCheckStmt = $this->db->prepare("SELECT SUM(Variant_Total_Qty) as total, SUM(Variant_Available_Qty) as available FROM item_variants WHERE ItemID = :id");
+                $variantCheckStmt->execute([':id' => $itemId]);
+                $variantQtys = $variantCheckStmt->fetch(PDO::FETCH_ASSOC);
+
+                if ($variantQtys && $variantQtys['available'] < $variantQtys['total']) {
+                    $this->lastError = "Cannot delete item. Some variants are currently borrowed.";
+                    $this->db->rollBack();
+                    return false;
+                }
+                // Delete variants first
+                $deleteVariantsStmt = $this->db->prepare("DELETE FROM item_variants WHERE ItemID = :id");
+                $deleteVariantsStmt->execute([':id' => $itemId]);
+            } elseif ($item['Available_Qty'] < $item['Total_Qty']) {
+                $this->lastError = "Cannot delete item. Some units are currently borrowed.";
+                $this->db->rollBack();
+                return false;
+            }
+            
+            // 4. Delete the main item
+            $deleteItemStmt = $this->db->prepare("DELETE FROM inventory WHERE ItemID = :id");
+            $deleteItemStmt->execute([':id' => $itemId]);
+
+            $this->db->commit();
+
+            // 5. Clean up image file
+            $imagePath = __DIR__ . "/../assets/img/items/{$itemId}.png";
+            if (file_exists($imagePath)) {
+                @unlink($imagePath);
+            }
+
+            return $deleteItemStmt->rowCount() > 0;
+
+        } catch (PDOException $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            error_log("Inventory Delete Error: " . $e->getMessage());
+            $this->lastError = "A database error occurred. The item might be referenced in past borrowing records.";
+            return false;
+        }
+    }
+
+    /**
+     * Imports or updates an inventory item from an array of data (e.g., from a CSV row).
+     * @param array $data The associative array of item data.
+     * @return bool True on success, false on failure.
+     */
+    public function importInventoryItem(array $data) {
+        try {
+            $this->db->beginTransaction();
+
+            // 1. Find or Create Category
+            $stmt = $this->db->prepare("SELECT CategoryID FROM categories WHERE Category_Name = :name");
+            $stmt->execute([':name' => $data['category']]);
+            $categoryId = $stmt->fetchColumn();
+
+            if (!$categoryId) {
+                $catQuery = "INSERT INTO categories (Category_Name, is_consumable) VALUES (:name, :consumable)";
+                $catStmt = $this->db->prepare($catQuery);
+                $catStmt->execute([':name' => $data['category'], ':consumable' => $data['is_consumable']]);
+                $categoryId = $this->db->lastInsertId();
+            }
+
+            // 2. Check if item exists
+            $stmt = $this->db->prepare("SELECT ItemID FROM inventory WHERE Item_Name = :name");
+            $stmt->execute([':name' => $data['name']]);
+            $itemId = $stmt->fetchColumn();
+
+            if ($itemId) {
+                // Item exists: Update its core details
+                $updateStmt = $this->db->prepare(
+                    "UPDATE inventory SET Description = :desc, Location = :loc, CategoryID = :catId, is_consumable = :consumable, is_scalable = :scalable WHERE ItemID = :id"
+                );
+                $updateStmt->execute([
+                    ':desc' => $data['description'],
+                    ':loc' => $data['location'],
+                    ':catId' => $categoryId,
+                    ':consumable' => $data['is_consumable'],
+                    ':scalable' => $data['is_scalable'],
+                    ':id' => $itemId
+                ]);
+            } else {
+                // Item does not exist: Create it with zero quantity initially
+                $insertStmt = $this->db->prepare(
+                    "INSERT INTO inventory (Item_Name, CategoryID, Description, Location, is_consumable, is_scalable, Total_Qty, Available_Qty) 
+                     VALUES (:name, :catId, :desc, :loc, :consumable, :scalable, 0, 0)"
+                );
+                $insertStmt->execute([
+                    ':name' => $data['name'],
+                    ':catId' => $categoryId,
+                    ':desc' => $data['description'],
+                    ':loc' => $data['location'],
+                    ':consumable' => $data['is_consumable'],
+                    ':scalable' => $data['is_scalable']
+                ]);
+                $itemId = $this->db->lastInsertId();
+            }
+
+            // 3. Handle quantities based on scalability
+            if ($data['is_scalable'] == 0) {
+                // Non-scalable: Update the main inventory table quantities.
+                // This assumes an overwrite. For a safer update, use logic from updateInventoryItem().
+                $qtyStmt = $this->db->prepare("UPDATE inventory SET Total_Qty = :qty, Available_Qty = :qty WHERE ItemID = :id");
+                $qtyStmt->execute([':qty' => $data['total_qty'], ':id' => $itemId]);
+            } else {
+                // Scalable: Clear old variants and insert new ones from the 'variants' string.
+                $this->db->prepare("DELETE FROM item_variants WHERE ItemID = :id")->execute([':id' => $itemId]);
+
+                if (!empty($data['variants'])) {
+                    $variantPairs = explode(',', $data['variants']);
+                    $variantInsertStmt = $this->db->prepare("INSERT INTO item_variants (ItemID, Size_Value, Unit, Variant_Total_Qty, Variant_Available_Qty) VALUES (:itemId, :size, :unit, :qty, :qty)");
+                    foreach ($variantPairs as $pair) {
+                        list($sizeInfo, $qty) = array_pad(explode(':', trim($pair)), 2, 0);
+                        preg_match('/([0-9\.]+)\s*(.*)/', $sizeInfo, $matches);
+                        $variantInsertStmt->execute([':itemId' => $itemId, ':size' => $matches[1] ?? '0', ':unit' => $matches[2] ?? '', ':qty' => (int)$qty]);
+                    }
+                }
+                $this->updateInventoryTotalFromVariants($itemId);
+            }
+
+            $this->db->commit();
+            return true;
+        } catch (Exception $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            $this->lastError = $e->getMessage();
+            error_log("Inventory Import DB Error: " . $e->getMessage());
+            return false;
+        }
     }
 
     // --- TEACHER CLASS & MASTERLIST MANAGEMENT ---
 
     // Create a new class section
     public function createClass($teacherUserID, $className, $section, $semester) {
+        // First, check if a class with the same details already exists for this teacher
+        $checkQuery = "SELECT ClassID FROM classes WHERE TeacherID = :tid AND Class_Name = :cname AND Section = :sec AND Semester = :sem";
+        $checkStmt = $this->db->prepare($checkQuery);
+        $checkStmt->execute(['tid' => $teacherUserID, 'cname' => $className, 'sec' => $section, 'sem' => $semester]);
+        if ($checkStmt->fetch()) {
+            $this->lastError = "A class with the same name, section, and semester already exists.";
+            return false;
+        }
+
+        // If no duplicate, proceed with insertion
         $query = "INSERT INTO classes (TeacherID, Class_Name, Section, Semester) 
                   VALUES (:tid, :cname, :sec, :sem)";
         $stmt = $this->db->prepare($query);
-        $stmt->execute(['tid' => $teacherUserID, 'cname' => $className, 'sec' => $section, 'sem' => $semester]);
-        return $this->db->lastInsertId();
+        if ($stmt->execute(['tid' => $teacherUserID, 'cname' => $className, 'sec' => $section, 'sem' => $semester])) {
+            return $this->db->lastInsertId();
+        }
+        $this->lastError = "A database error occurred during class creation.";
+        return false;
     }
 
    // Get all classes assigned to a specific teacher
@@ -131,6 +513,17 @@ class DataManager {
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 
+    /**
+     * Get all classes in the system (for Admin view).
+     * @return array
+     */
+    public function getAllClasses() {
+        $query = "SELECT * FROM classes ORDER BY Class_Name, Section";
+        $stmt = $this->db->prepare($query);
+        $stmt->execute();
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
     // Get details for a single class
     public function getClassDetails($classID) {
         $query = "SELECT * FROM classes WHERE ClassID = :cid LIMIT 1";
@@ -139,28 +532,79 @@ class DataManager {
         return $stmt->fetch(PDO::FETCH_ASSOC);
     }
 
-    // Add a student to the global masterlist (used during CSV upload)
-    public function uploadStudentToMasterlist($idNum, $fullName, $email) {
+    /**
+     * Add a user to the global masterlist (or update if exists).
+     * If a class ID is provided for a student, it also enrolls them into that class.
+     * This is now a single transaction to ensure data integrity.
+     *
+     * @param string $idNum The user's ID number.
+     * @param string $fullName The user's full name.
+     * @param string $email The user's email.
+     * @param string $role The user's role ('Student', 'Teacher', etc.).
+     * @param int|null $classID The optional class ID to enroll a student into.
+     * @return int|false The MasterID on success, or false on failure.
+     */
+    public function uploadUserToMasterlist($idNum, $fullName, $email, $role, $classID = null) {
+        if (!in_array($role, ['Student', 'Teacher', 'Admin', 'LabTech'])) {
+            return false;
+        }
         try {
-            $query = "INSERT INTO lookup_masterlist (ID_Number, Full_Name, Official_Email, Role) 
-                      VALUES (:id, :name, :email, 'Student')
-                      ON DUPLICATE KEY UPDATE Full_Name = VALUES(Full_Name), Official_Email = VALUES(Official_Email)";
+            $this->db->beginTransaction();
+
+            $query = "INSERT INTO lookup_masterlist (ID_Number, Full_Name, Official_Email, Role)
+                      VALUES (:id, :name, :email, :role)
+                      ON DUPLICATE KEY UPDATE Full_Name = VALUES(Full_Name), Official_Email = VALUES(Official_Email), Role = VALUES(Role)";
             $stmt = $this->db->prepare($query);
-            $stmt->execute(['id' => $idNum, 'name' => $fullName, 'email' => $email]);
+            $stmt->execute(['id' => $idNum, 'name' => $fullName, 'email' => $email, 'role' => $role]);
+
             $check = "SELECT MasterID FROM lookup_masterlist WHERE ID_Number = :id";
             $cStmt = $this->db->prepare($check);
             $cStmt->execute(['id' => $idNum]);
-            return $cStmt->fetchColumn();
-        } catch (Exception $e) { return false; }
+            $masterID = $cStmt->fetchColumn();
+
+            // If a classID is provided and the user is a student, enroll them.
+            // Use !empty() to guard against null, 0, or empty strings for the ClassID.
+            if ($masterID && !empty($classID) && $role === 'Student') {
+                // The enrollByMasterID function will now throw an exception on failure,
+                // which will be caught here and trigger a transaction rollback.
+                $this->enrollByMasterID($masterID, $classID);
+            }
+
+            $this->db->commit();
+            return $masterID;
+        } catch (Exception $e) { 
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            error_log("Masterlist Upload/Enrollment Error: " . $e->getMessage());
+            
+            // Create a more user-friendly, specific error message to throw
+            $errorMessage = "Error for student '{$fullName}' (ID: {$idNum}): ";
+            if (str_contains($e->getMessage(), '1452')) { // Foreign Key constraint fails
+                $errorMessage .= "Enrollment failed. The Class ID '{$classID}' may be invalid or not exist.";
+            } else {
+                $errorMessage .= "A database error occurred during processing. The student was not added.";
+            }
+            throw new Exception($errorMessage);
+        }
     }
 
     // Enroll a student into a class using their MasterID
     public function enrollByMasterID($masterID, $classID) {
         try {
-            $query = "INSERT IGNORE INTO class_enrollment (ClassID, MasterID) VALUES (:cid, :mid)";
+            // This query is safer than INSERT IGNORE.
+            // It will silently do nothing if the student is already enrolled (due to a UNIQUE index).
+            // However, it WILL throw a PDOException for other errors, like a foreign key violation
+            // if the ClassID is invalid. This is what we want.
+            $query = "INSERT INTO class_enrollment (ClassID, MasterID) VALUES (:cid, :mid)
+                      ON DUPLICATE KEY UPDATE EnrollmentID = EnrollmentID"; // No-op for duplicates
             $stmt = $this->db->prepare($query);
             return $stmt->execute(['cid' => $classID, 'mid' => $masterID]);
-        } catch (PDOException $e) { return false; }
+        } catch (PDOException $e) {
+            error_log("Enrollment Error: " . $e->getMessage());
+            // Re-throw the exception to ensure the calling transaction is rolled back.
+            throw $e;
+        }
     }
 
     // Get classes for a student based on their MasterID
@@ -189,13 +633,12 @@ class DataManager {
     }
 
     // Define required items for an activity
-    public function addActivityRequirement($activityID, $itemID, $qty) {
+    public function addActivityRequirement($activityID, $itemID, $qty, $variantID = null) {
         try {
-            // FIX: Uses Required_Qty to match student view fetching
-            $query = "INSERT INTO activity_requirements (ActivityID, ItemID, Required_Qty) 
-                      VALUES (:aid, :iid, :qty)";
+            $query = "INSERT INTO activity_requirements (ActivityID, ItemID, Required_Qty, VariantID) 
+                      VALUES (:aid, :iid, :qty, :vid)";
             $stmt = $this->db->prepare($query);
-            return $stmt->execute(['aid' => $activityID, 'iid' => $itemID, 'qty' => $qty]);
+            return $stmt->execute(['aid' => $activityID, 'iid' => $itemID, 'qty' => $qty, 'vid' => $variantID]);
         } catch (PDOException $e) {
             error_log("Requirement Error: " . $e->getMessage());
             return false;
@@ -203,16 +646,30 @@ class DataManager {
     }
 
     // Get the list of items required for an activity
-    public function getActivityRequirements($activityID) {
-        $query = "SELECT i.ItemID, i.Item_Name, ar.Required_Qty 
+    public function getActivityRequirements($activityID) { // This function is correct
+        $query = "SELECT i.ItemID, i.Item_Name, i.is_consumable, i.is_scalable, ar.Required_Qty, ar.VariantID,
+                         iv.Size_Value, iv.Unit
                   FROM activity_requirements ar
                   JOIN inventory i ON ar.ItemID = i.ItemID
+                  LEFT JOIN item_variants iv ON ar.VariantID = iv.VariantID
                   WHERE ar.ActivityID = :aid";
         $stmt = $this->db->prepare($query);
         $stmt->execute(['aid' => $activityID]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 
+    // Get the list of classes an activity is assigned to
+    public function getAssignedClassesForActivity($activityID) {
+        try {
+            $sql = "SELECT ClassID FROM activity_assignments WHERE ActivityID = :aid";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([':aid' => $activityID]);
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("getAssignedClassesForActivity Error: " . $e->getMessage());
+            return [];
+        }
+    }
     // --- PHASE 8: BORROWING SYSTEM ---
 
     // Initialize a borrowing session (Pending status)
@@ -223,7 +680,7 @@ class DataManager {
                 $activityID = null;
             }
 
-            $query = "INSERT INTO borrowing_sessions (StudentID, ActivityID, Status, QR_Code_Data, Request_Reason) 
+            $query = "INSERT INTO borrowing_sessions (StudentID, ActivityID, Status, QR_Code_Data, Remarks) 
                       VALUES (:sid, :aid, 'Pending', :qr, :reason)";
             $stmt = $this->db->prepare($query);
             $stmt->execute(['sid' => $studentID, 'aid' => $activityID, 'qr' => $qrData, 'reason' => $reason]);
@@ -296,55 +753,179 @@ class DataManager {
 
     // --- ADMIN DASHBOARD ANALYTICS ---
     public function getAdminKPIs() {
-        try {
-            $stats = [];
-            
-            // 1. Inventory Stats
-            $inv = $this->db->query("SELECT COUNT(*) as unique_items, SUM(Total_Qty) as total_stock FROM inventory")->fetch(PDO::FETCH_ASSOC);
-            $stats['unique_items'] = $inv['unique_items'] ?? 0;
-            $stats['total_stock'] = $inv['total_stock'] ?? 0;
+        // MOCK DATA for demonstration purposes
+        $stats = [];
 
-            // 2. User & Request Stats
-            $stats['total_users'] = $this->db->query("SELECT COUNT(*) FROM users")->fetchColumn();
-            $stats['pending_reqs'] = $this->db->query("SELECT COUNT(*) FROM borrowing_sessions WHERE Status = 'Pending'")->fetchColumn();
-            $stats['open_damages'] = $this->db->query("SELECT COUNT(*) FROM damaged_returns WHERE status = 'Unresolved'")->fetchColumn();
+        // 1. Inventory Stats
+        $stats['unique_items'] = 128;
+        $stats['total_stock'] = 2450;
+        $stats['lowest_stock_items'] = [
+            ['Item_Name' => 'Test Tubes', 'Available_Qty' => 5],
+            ['Item_Name' => 'Filter Paper', 'Available_Qty' => 8],
+            ['Item_Name' => 'Pipette Tips', 'Available_Qty' => 12],
+            ['Item_Name' => 'Ethanol 95%', 'Available_Qty' => 15],
+        ];
 
-            // 3. Population Stats
-            $stats['student_pop'] = $this->db->query("SELECT COUNT(*) FROM lookup_masterlist WHERE Role = 'Student'")->fetchColumn();
-            $stats['teacher_pop'] = $this->db->query("SELECT COUNT(*) FROM lookup_masterlist WHERE Role = 'Teacher'")->fetchColumn();
-            $stats['total_classes'] = $this->db->query("SELECT COUNT(*) FROM classes")->fetchColumn();
+        // 2. User & Request Stats
+        $stats['total_users'] = 450;
+        $stats['pending_reqs'] = 12;
+        $stats['open_damages'] = 3;
 
-            // 3. Graph Data: Inventory by Category
-            $catSql = "SELECT c.Category_Name, COUNT(i.ItemID) as count 
-                       FROM inventory i 
-                       JOIN categories c ON i.CategoryID = c.CategoryID 
-                       GROUP BY c.Category_Name";
-            $stats['categories'] = $this->db->query($catSql)->fetchAll(PDO::FETCH_ASSOC);
+        // 3. Population Stats
+        $stats['user_population_by_role'] = [
+            ['Role' => 'Student', 'count' => 420],
+            ['Role' => 'Teacher', 'count' => 25],
+            ['Role' => 'Admin', 'count' => 5],
+        ];
+        $stats['student_pop'] = 420;
+        $stats['teacher_pop'] = 25;
+        $stats['total_classes'] = 15;
 
-            // 4. Graph Data: Session Status
-            $statusSql = "SELECT Status, COUNT(*) as count FROM borrowing_sessions GROUP BY Status";
-            $stats['session_stats'] = $this->db->query($statusSql)->fetchAll(PDO::FETCH_ASSOC);
+        // Class Demographics for chart
+        $stats['class_demographics'] = [
+            ['Class_Name' => 'GenChem 1', 'Section' => 'STEM-12A', 'student_count' => 35],
+            ['Class_Name' => 'GenChem 1', 'Section' => 'STEM-12B', 'student_count' => 38],
+            ['Class_Name' => 'Physics 2', 'Section' => 'STEM-12C', 'student_count' => 32],
+            ['Class_Name' => 'Biology Lab', 'Section' => 'BSBio-2', 'student_count' => 28],
+        ];
 
-            // 5. Trend Data: Borrowing (Last 7 Days)
-            $trendSql = "SELECT DATE(CreatedAt) as date, COUNT(*) as count 
-                         FROM borrowing_sessions 
-                         WHERE CreatedAt >= DATE(NOW()) - INTERVAL 7 DAY 
-                         GROUP BY DATE(CreatedAt) 
-                         ORDER BY date ASC";
-            $stats['borrowing_trend'] = $this->db->query($trendSql)->fetchAll(PDO::FETCH_ASSOC);
+        // 4. Graph Data: Inventory by Category
+        $stats['categories'] = [
+            ['Category_Name' => 'Glassware', 'count' => 45],
+            ['Category_Name' => 'Chemicals', 'count' => 60],
+            ['Category_Name' => 'Apparatus', 'count' => 23],
+        ];
 
-            // 6. Trend Data: Damages (Last 7 Days)
-            $dmgTrendSql = "SELECT DATE(logged_at) as date, COUNT(*) as count 
-                            FROM damaged_returns 
-                            WHERE logged_at >= DATE(NOW()) - INTERVAL 7 DAY 
-                            GROUP BY DATE(logged_at) 
-                            ORDER BY date ASC";
-            $stats['damage_trend'] = $this->db->query($dmgTrendSql)->fetchAll(PDO::FETCH_ASSOC);
+        // 5. Graph Data: Session Status
+        $stats['session_stats'] = [
+            ['Status' => 'Pending', 'count' => 12],
+            ['Status' => 'Approved', 'count' => 8],
+            ['Status' => 'Issued', 'count' => 25],
+            ['Status' => 'Returned', 'count' => 150],
+            ['Status' => 'Cancelled', 'count' => 5],
+        ];
 
-            return $stats;
-        } catch (PDOException $e) { return []; }
+        // 6. Graph Data: Damage Status
+        $stats['damage_stats'] = [
+            ['status' => 'Unresolved', 'count' => 3],
+            ['status' => 'Under Review', 'count' => 2],
+            ['status' => 'Resolved', 'count' => 18],
+        ];
+
+        // 7. Trend Data: Borrowing (Last 7 Days)
+        $stats['borrowing_trend'] = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $stats['borrowing_trend'][] = [
+                'date' => date('Y-m-d', strtotime("-$i days")),
+                'count' => rand(5, 25),
+            ];
+        }
+
+        // 8. Trend Data: Damages (Last 7 Days)
+        $stats['damage_trend'] = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $stats['damage_trend'][] = [
+                'date' => date('Y-m-d', strtotime("-$i days")),
+                'count' => rand(0, 3),
+            ];
+        }
+
+        return $stats;
     }
 
+    public function getTeacherDashboardData($teacherID) {
+        $data = [
+            'total_students' => 0,
+            'total_classes' => 0,
+            'clearance_progress' => []
+        ];
+
+        try {
+            // 1. Total Enrolled Students
+            $sql_students = "SELECT COUNT(DISTINCT ce.MasterID) 
+                             FROM class_enrollment ce
+                             JOIN classes c ON ce.ClassID = c.ClassID
+                             WHERE c.TeacherID = :tid";
+            $stmt_students = $this->db->prepare($sql_students);
+            $stmt_students->execute(['tid' => $teacherID]);
+            $data['total_students'] = (int)$stmt_students->fetchColumn();
+
+            // 3. Total Classes
+            $sql_classes = "SELECT COUNT(*) FROM classes WHERE TeacherID = :tid";
+            $stmt_classes = $this->db->prepare($sql_classes);
+            $stmt_classes->execute(['tid' => $teacherID]);
+            $data['total_classes'] = (int)$stmt_classes->fetchColumn();
+
+            // 4. Class Clearance Progress
+            $sql_clearance = "SELECT
+                                c.ClassID, c.Class_Name, c.Section,
+                                COUNT(ce.EnrollmentID) AS total_students,
+                                SUM(CASE WHEN ce.ClearanceStatus = 'Cleared' THEN 1 ELSE 0 END) AS cleared_students
+                              FROM classes c
+                              LEFT JOIN class_enrollment ce ON c.ClassID = c.ClassID
+                              WHERE c.TeacherID = :tid
+                              GROUP BY c.ClassID, c.Class_Name, c.Section
+                              ORDER BY c.Class_Name, c.Section";
+            $stmt_clearance = $this->db->prepare($sql_clearance);
+            $stmt_clearance->execute(['tid' => $teacherID]);
+            $data['clearance_progress'] = $stmt_clearance->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Teacher Dashboard Data Error: " . $e->getMessage());
+            return []; // Return empty array on error
+        }
+        return $data;
+    }
+
+    public function getStudentDashboardData($studentID) {
+        $data = [
+            'my_classes' => [],
+            'upcoming_deadlines' => [],
+            'pending_sessions' => 0,
+            'issued_sessions' => 0,
+        ];
+
+        try {
+            // 1. Get Classes and Activity Counts
+            $sql_classes = "SELECT 
+                                c.ClassID, c.Class_Name, c.Section, c.Semester, m.Full_Name as TeacherName
+                            FROM class_enrollment ce
+                            JOIN classes c ON ce.ClassID = c.ClassID
+                            JOIN users u_teacher ON c.TeacherID = u_teacher.UserID
+                            JOIN lookup_masterlist m ON u_teacher.MasterID = m.MasterID
+                            JOIN users u_student ON ce.MasterID = u_student.MasterID
+                            WHERE u_student.UserID = :sid";
+            $stmt_classes = $this->db->prepare($sql_classes);
+            $stmt_classes->execute(['sid' => $studentID]);
+            $data['my_classes'] = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
+
+            // 2. Get Upcoming Deadlines
+            $sql_deadlines = "SELECT la.ActivityID, la.Title, la.Deadline, c.Class_Name, c.ClassID
+                              FROM lab_activities la
+                              JOIN activity_assignments aa ON la.ActivityID = aa.ActivityID
+                              JOIN classes c ON aa.ClassID = c.ClassID
+                              JOIN class_enrollment ce ON c.ClassID = ce.ClassID
+                              JOIN users u ON ce.MasterID = u.MasterID
+                              WHERE u.UserID = :sid AND la.Deadline >= NOW()
+                              GROUP BY la.ActivityID
+                              ORDER BY la.Deadline ASC
+                              LIMIT 3";
+            $stmt_deadlines = $this->db->prepare($sql_deadlines);
+            $stmt_deadlines->execute(['sid' => $studentID]);
+            $data['upcoming_deadlines'] = $stmt_deadlines->fetchAll(PDO::FETCH_ASSOC);
+
+            // 3. Get Session Counts
+            $sql_sessions = "SELECT Status, COUNT(*) as count FROM borrowing_sessions WHERE StudentID = :sid AND Status IN ('Pending', 'Issued') GROUP BY Status";
+            $stmt_sessions = $this->db->prepare($sql_sessions);
+            $stmt_sessions->execute(['sid' => $studentID]);
+            $counts = $stmt_sessions->fetchAll(PDO::FETCH_KEY_PAIR);
+            $data['pending_sessions'] = $counts['Pending'] ?? 0;
+            $data['issued_sessions'] = $counts['Issued'] ?? 0;
+
+        } catch (PDOException $e) {
+            error_log("Student Dashboard Data Error: " . $e->getMessage());
+        }
+        return $data;
+    }
     // Generate a unique hash for QR codes
     private function generateQRHash($studentId) {
         return bin2hex(random_bytes(4)) . "-" . $studentId . "-" . time();
@@ -367,10 +948,70 @@ class DataManager {
 
     // Get inventory items with category names
     public function getInventoryShop() {
-        $query = "SELECT i.*, c.Category_Name FROM inventory i LEFT JOIN categories c ON i.CategoryID = c.CategoryID ORDER BY i.Item_Name ASC";
+        $query = "SELECT i.*, c.Category_Name,
+                         CASE
+                             WHEN i.is_consumable = 1 THEN 'consumable'
+                             ELSE 'non-consumable'
+                         END AS Asset_Type
+                  FROM inventory i
+                  LEFT JOIN categories c ON i.CategoryID = c.CategoryID
+                  ORDER BY i.Item_Name ASC";
         $stmt = $this->db->prepare($query);
         $stmt->execute();
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $inventoryItems = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $variantQuery = $this->db->prepare("SELECT * FROM item_variants WHERE ItemID = :itemId ORDER BY CAST(Size_Value AS UNSIGNED)");
+
+        foreach ($inventoryItems as &$item) {
+            if ($item['is_scalable'] == 1) {
+                $variantQuery->execute([':itemId' => $item['ItemID']]);
+                $item['variants'] = $variantQuery->fetchAll(PDO::FETCH_ASSOC);
+            } else {
+                $item['variants'] = [];
+            }
+        }
+        return $inventoryItems;
+    }
+
+    public function getPaginatedInventory($options = []) {
+        $limit = $options['limit'] ?? 12;
+        $page = $options['page'] ?? 1;
+        $offset = ($page - 1) * $limit;
+        $search = $options['search'] ?? '';
+        $category = $options['category'] ?? 'all';
+    
+        $whereClauses = [];
+        $params = [];
+    
+        if (!empty($search)) {
+            $whereClauses[] = "i.Item_Name LIKE :search";
+            $params[':search'] = "%$search%";
+        }
+    
+        if ($category !== 'all' && is_numeric($category)) {
+            $whereClauses[] = "i.CategoryID = :category";
+            $params[':category'] = $category;
+        }
+    
+        $whereSql = count($whereClauses) > 0 ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
+    
+        // Query for total count
+        $countSql = "SELECT COUNT(i.ItemID) FROM inventory i $whereSql";
+        $countStmt = $this->db->prepare($countSql);
+        $countStmt->execute($params);
+        $totalRecords = (int) $countStmt->fetchColumn();
+    
+        // Query for data
+        $dataSql = "SELECT i.ItemID, i.Item_Name, i.CategoryID FROM inventory i $whereSql ORDER BY i.Item_Name ASC LIMIT :limit OFFSET :offset";
+        $dataStmt = $this->db->prepare($dataSql);
+        
+        foreach ($params as $key => $val) { $dataStmt->bindValue($key, $val); }
+        $dataStmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $dataStmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $dataStmt->execute();
+        $items = $dataStmt->fetchAll(PDO::FETCH_ASSOC);
+    
+        return ['items' => $items, 'total' => $totalRecords, 'pages' => ceil($totalRecords / $limit), 'currentPage' => $page];
     }
 
     // Get details of a specific item
@@ -382,43 +1023,44 @@ class DataManager {
     }
     
  // Process the student's cart and create a borrowing request
- public function submitRequisition($studentId, $activityId, $items) {
+ public function submitRequisition($studentId, $activityId, $items, $reason = null) {
     try {
         $this->db->beginTransaction();
 
-        // 🟢 FIX: Force activityId to NULL if it's empty, 0, or false
-        // This ensures the database treats it as an "Independent Borrow"
         if (empty($activityId) || $activityId === 0 || $activityId === '0') {
             $activityId = null;
         }
 
         // 1. Insert the session record
-        $sql = "INSERT INTO borrowing_sessions (StudentID, ActivityID, Status, QR_Code_Data) 
-                VALUES (:sid, :aid, 'Pending', :qr)";
+        $sql = "INSERT INTO borrowing_sessions (StudentID, ActivityID, Status, QR_Code_Data, Remarks) 
+                VALUES (:sid, :aid, 'Pending', :qr, :reason)";
         $stmt = $this->db->prepare($sql);
         
         $qrData = "SNHS-REF-" . strtoupper(uniqid()); 
         
         $stmt->execute([
             'sid' => $studentId,
-            'aid' => $activityId, // Now this is safely NULL if needed
-            'qr'  => $qrData
+            'aid' => $activityId,
+            'qr'  => $qrData,
+            'reason' => $reason
         ]);
         
         $sessionId = $this->db->lastInsertId();
 
         // 2. Map items to the session
-        $itemSql = "INSERT INTO borrowed_items (SessionID, ItemID, Quantity) VALUES (:sid, :iid, :qty)";
+        $itemSql = "INSERT INTO borrowed_items (SessionID, ItemID, VariantID, Quantity) VALUES (:sid, :iid, :vid, :qty)";
         $itemStmt = $this->db->prepare($itemSql);
 
         foreach ($items as $item) {
-            $iid = $item['id'] ?? $item['ItemID'];
+            $iid = $item['itemId'] ?? ($item['id'] ?? null);
+            $vid = $item['variantId'] ?? null;
             $qty = $item['qty'] ?? $item['Quantity'];
 
             $itemStmt->execute([
                 'sid' => $sessionId,
                 'iid' => $iid,
-                'qty' => $qty
+                'vid' => $vid,
+                'qty' => $qty,
             ]);
         }
 
@@ -474,45 +1116,31 @@ public function getActivityDetails($activityID, $classID = null) {
 // Get all groups and their members for a specific activity
 public function getGroupsWithSubmissions($activityID, $classID) {
     try {
-        // 1. MAIN QUERY: Fetch Groups (Unchanged)
-        $sql = "SELECT g.GroupID, g.GroupName, 
-                       NULL as SubmissionID, 
-                       NULL as SubmissionDate, 
-                       NULL as Grade, 
-                       'Pending' AS Status, 
-                       NULL as Report_URL, 
-                       NULL as Feedback
-                FROM activity_groups g
+        // 1. MAIN QUERY: Fetch Groups. Submission data is removed.
+        $sql = "SELECT g.GroupID, g.GroupName FROM activity_groups g
                 WHERE g.ActivityID = :aid";
         
         $stmt = $this->db->prepare($sql);
         $stmt->execute([':aid' => $activityID]);
         $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-        // 2. MEMBER LOOP: Fixed to include Is_Leader
+        // Re-add member fetching logic
         if ($groups) {
             foreach ($groups as &$group) {
-                // 🟢 REVISED JOIN: We add 'AS name' and 'AS role' here
                 // This forces the keys to be lowercase and simple for JavaScript
                 $sqlMembers = "SELECT lm.Full_Name AS name, gm.Is_Leader AS role 
                                FROM group_members gm
                                JOIN lookup_masterlist lm ON gm.MasterID = lm.MasterID
                                WHERE gm.GroupID = :gid
-                               ORDER BY gm.Is_Leader DESC, lm.Full_Name ASC"; 
-                               
+                               ORDER BY gm.Is_Leader DESC, lm.Full_Name ASC";
+
                 $stmtMembers = $this->db->prepare($sqlMembers);
                 $stmtMembers->execute([':gid' => $group['GroupID']]);
-                
-                // Fetch as Associative Array
+
                 $members = $stmtMembers->fetchAll(PDO::FETCH_ASSOC);
-                
-                // Add null avatar to prevent frontend warnings
-                foreach ($members as &$m) { $m['Avatar'] = null; } 
-                
                 $group['Members'] = $members;
             }
         }
-
         return $groups;
 
     } catch (PDOException $e) {
@@ -706,21 +1334,84 @@ public function processReturn($sid, $remarks) {
     }
 }
 
-// Get all activities for a specific class (Student View)
-public function getActivitiesByClassForStudent($classID, $studentID) {
-    try {
-        $sql = "SELECT a.*, NULL AS SubmissionStatus, NULL AS Grade 
-                FROM lab_activities a
-                JOIN activity_assignments aa ON a.ActivityID = aa.ActivityID
-                WHERE aa.ClassID = :cid 
-                ORDER BY a.CreatedAt DESC";
-        
-        $stmt = $this->db->prepare($sql);
-        $stmt->execute(['cid' => $classID]);
-        return $stmt->fetchAll(PDO::FETCH_ASSOC);
-    } catch (PDOException $e) {
-        return [];
+/**
+ * Get paginated and filtered activities for a student in a specific class.
+ * Includes submission status for each activity.
+ *
+ * @param int $classID The ID of the class.
+ * @param int $studentID The UserID of the student.
+ * @param array $options Filtering, sorting, and pagination options.
+ * @return array An array containing the data, total records, and page count.
+ */
+public function getActivitiesByClassForStudent($classID, $studentID, $options = []) {
+    if (!$this->db) return ['data' => [], 'total' => 0, 'pages' => 1, 'current_page' => 1];
+
+    $masterID = $this->getMasterID($studentID);
+    if (!$masterID) return ['data' => [], 'total' => 0, 'pages' => 1, 'current_page' => 1];
+
+    // 1. Set up options
+    $search = $options['search'] ?? '';
+    $status = $options['status'] ?? 'all';
+    $sort = $options['sort'] ?? 'deadline_desc';
+    $limit = $options['limit'] ?? 10;
+    $page = $options['page'] ?? 1;
+    $offset = ($page - 1) * $limit;
+
+    // 2. Build Query
+    $params = [':cid' => $classID];
+    $whereClauses = "aa.ClassID = :cid";
+
+    if (!empty($search)) {
+        $whereClauses .= " AND a.Title LIKE :search";
+        $params[':search'] = "%$search%";
     }
+
+    // Sorting logic
+    $orderBy = "ORDER BY Deadline DESC"; // Default
+    if ($sort === 'deadline_asc') $orderBy = "ORDER BY Deadline ASC";
+    elseif ($sort === 'title_asc') $orderBy = "ORDER BY Title ASC";
+    elseif ($sort === 'created_asc') $orderBy = "ORDER BY CreatedAt ASC";
+
+    // The `lab_submissions` table that was previously used here does not exist, causing a fatal error.
+    // This has been removed. The submission status is now hardcoded to 'Open' as the underlying
+    // submission feature appears to be deprecated or removed.
+
+    // We build the main query and then wrap it to filter by the calculated status.
+    $baseQuery = "
+        FROM lab_activities a
+        JOIN activity_assignments aa ON a.ActivityID = aa.ActivityID
+        WHERE $whereClauses
+    ";
+
+    $wrappedQuery = "SELECT *, 'Open' as submission_status FROM (
+        SELECT a.*
+        $baseQuery
+        GROUP BY a.ActivityID
+    ) as temp_table";
+
+    // Add status filtering
+    $statusWhere = "";
+    if ($status !== 'all') {
+        $statusWhere = " WHERE submission_status = :status";
+        $params[':status'] = $status;
+    }
+
+    // Get total records for pagination
+    $countQuery = "SELECT COUNT(*) FROM ($wrappedQuery) as count_table" . $statusWhere;
+    $countStmt = $this->db->prepare($countQuery);
+    $countStmt->execute($params);
+    $totalRecords = (int) $countStmt->fetchColumn();
+    $totalPages = ceil($totalRecords / $limit);
+
+    // Get the actual data
+    $dataQuery = $wrappedQuery . $statusWhere . " " . $orderBy . " LIMIT :limit OFFSET :offset";
+    $stmt = $this->db->prepare($dataQuery);
+    foreach ($params as $key => &$val) { $stmt->bindParam($key, $val); }
+    $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+
+    return ['data' => $stmt->fetchAll(PDO::FETCH_ASSOC), 'total' => $totalRecords, 'pages' => $totalPages, 'current_page' => $page];
 }
 
 // Get all activities created by a teacher
@@ -764,43 +1455,17 @@ public function getActivitiesByClass($classID) {
  */
 public function getEnrollmentWithSubmissions($activityID, $classID) {
     try {
-        // QUERY EXPLANATION:
-        // 1. SELECT from 'class_enrollment' (ce) to get the roster.
-        // 2. JOIN 'lookup_masterlist' (lm) to get the Name.
-        // 3. LEFT JOIN 'users' (u) to find the UserID (if they have signed up).
-        // 4. LEFT JOIN 'lab_submissions' (ls) to find their work.
-        
-        $sql = "SELECT lm.Full_Name, 
-                       NULL as Avatar, 
-                       NULL as SubmissionID, 
-                       NULL as SubmissionDate, 
-                       NULL as Grade, 
-                       'Pending' AS Status, 
-                       NULL as Report_URL, 
-                       NULL as Feedback,
-                       0 as Is_Late
+        // Query no longer joins lab_submissions
+        $sql = "SELECT lm.Full_Name, lm.MasterID
                 FROM class_enrollment ce
-                JOIN lookup_masterlist lm ON ce.MasterID = lm.MasterID
-                WHERE ce.ClassID = :cid
-                ORDER BY lm.Full_Name ASC";
+               JOIN lookup_masterlist lm ON ce.MasterID = lm.MasterID
+               WHERE ce.ClassID = :cid
+               ORDER BY lm.Full_Name ASC";
         
         $stmt = $this->db->prepare($sql);
-        $stmt->execute([
-            ':cid' => $classID
-        ]);
-        
-        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-        // FINAL SAFETY CHECK: If empty, verify class_enrollment isn't empty
-        if (empty($results)) {
-            // Uncomment the line below to see if the query ran but found 0 people
-            // die("Query ran successfully but found 0 students in Class ID: " . $classID);
-        }
-
-        return $results;
-
+        $stmt->execute(['cid' => $classID]);
+        return $stmt->fetchAll(PDO::FETCH_ASSOC);
     } catch (PDOException $e) {
-        // PRINT THE ERROR ON SCREEN
         die("<h3>Database Error (Individual List):</h3> " . $e->getMessage());
     }
 }
@@ -981,9 +1646,11 @@ public function getEnrolledStudents($class_id) {
             $sql = "SELECT 
                         ce.EnrollmentID, 
                         ce.ClearanceStatus, 
-                        m.MasterID,      /* <--- ADDED THIS */
+                        m.MasterID,
                         m.Full_Name, 
-                        m.ID_Number 
+                        m.ID_Number,
+                        m.Official_Email,
+                        m.is_verified AS Is_Verified
                     FROM class_enrollment ce
                     JOIN lookup_masterlist m ON ce.MasterID = m.MasterID
                     WHERE ce.ClassID = ?
@@ -997,6 +1664,94 @@ public function getEnrolledStudents($class_id) {
         }
     }
 
+    // Get all users who are not students (for admin management)
+    public function getManageableUsers() {
+        try {
+            $query = "SELECT MasterID, ID_Number, Full_Name, Official_Email, Role, is_verified
+                      FROM lookup_masterlist 
+                      WHERE Role != 'Student'
+                      ORDER BY Role, Full_Name ASC";
+            $stmt = $this->db->prepare($query);
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("getManageableUsers Error: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    // Get all users with the 'Teacher' role
+    public function getTeachers() {
+        try {
+            $query = "SELECT u.UserID, m.Full_Name 
+                      FROM users u
+                      JOIN lookup_masterlist m ON u.MasterID = m.MasterID
+                      WHERE m.Role = 'Teacher'
+                      ORDER BY m.Full_Name ASC";
+            $stmt = $this->db->prepare($query);
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("getTeachers Error: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    // Delete a class after checking for dependencies
+    public function deleteClass($classID) {
+        try {
+            $this->db->beginTransaction();
+
+            // 1. Check for enrolled students
+            $stmt = $this->db->prepare("SELECT COUNT(*) FROM class_enrollment WHERE ClassID = ?");
+            $stmt->execute([$classID]);
+            if ($stmt->fetchColumn() > 0) {
+                $this->lastError = "Cannot delete class. There are still students enrolled in it.";
+                $this->db->rollBack();
+                return false;
+            }
+
+            // 2. Check for assigned activities
+            $stmt = $this->db->prepare("SELECT COUNT(*) FROM activity_assignments WHERE ClassID = ?");
+            $stmt->execute([$classID]);
+            if ($stmt->fetchColumn() > 0) {
+                $this->lastError = "Cannot delete class. It still has activities assigned to it.";
+                $this->db->rollBack();
+                return false;
+            }
+
+            // 3. If checks pass, delete the class
+            $stmt = $this->db->prepare("DELETE FROM classes WHERE ClassID = ?");
+            $stmt->execute([$classID]);
+
+            $this->db->commit();
+            return $stmt->rowCount() > 0;
+        } catch (PDOException $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            error_log("Class Deletion Error: " . $e->getMessage());
+            $this->lastError = "A database error occurred during deletion.";
+            return false;
+        }
+    }
+
+    // Update a user's role in the masterlist
+    public function updateUserRole($masterId, $newRole) {
+        if (!in_array($newRole, ['Teacher', 'Admin', 'LabTech'])) {
+            $this->lastError = "Invalid role specified.";
+            return false;
+        }
+        try {
+            $query = "UPDATE lookup_masterlist SET Role = :role WHERE MasterID = :mid";
+            $stmt = $this->db->prepare($query);
+            return $stmt->execute(['role' => $newRole, 'mid' => $masterId]);
+        } catch (PDOException $e) {
+            error_log("updateUserRole Error: " . $e->getMessage());
+            $this->lastError = "Database error during role update.";
+            return false;
+        }
+    }
+
+
     // Get a list of damages for a specific student
     public function getStudentDamages($master_id) {
         if (!$this->db) { return []; }
@@ -1004,7 +1759,7 @@ public function getEnrolledStudents($class_id) {
         try {
             $sql = "SELECT 
                         dr.damage_id,
-                        i.ItemName,
+                        i.Item_Name,
                         dr.damage_type,
                         dr.qty_damaged,
                         dr.logged_at as ReturnDate, /* Alias for JS compatibility */
@@ -1074,19 +1829,25 @@ public function getEnrolledStudents($class_id) {
         $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
         // B. Loop through and attach Items & Liability Status
-        foreach ($sessions as &$session) {
+        foreach ($sessions as &$session) {  
             $sid = $session['SessionID'];
 
             // Fetch Items
-            $iStmt = $this->db->prepare("SELECT i.Item_Name, bi.Quantity 
+            $iStmt = $this->db->prepare("SELECT 
+                                             i.Item_Name, 
+                                             bi.Quantity,
+                                             i.is_consumable,
+                                             iv.Size_Value,
+                                             iv.Unit
                                          FROM borrowed_items bi 
                                          JOIN inventory i ON bi.ItemID = i.ItemID 
+                                         LEFT JOIN item_variants iv ON bi.VariantID = iv.VariantID
                                          WHERE bi.SessionID = ?");
             $iStmt->execute([$sid]);
             $session['items'] = $iStmt->fetchAll(PDO::FETCH_ASSOC);
 
             // NEW: Added 'evidence_image' to SELECT list
-            $dStmt = $this->db->prepare("SELECT damage_id, status, evidence_image FROM damaged_returns 
+            $dStmt = $this->db->prepare("SELECT damage_id, status, evidence_image, notes FROM damaged_returns 
                                          WHERE session_id = ? AND status != 'Resolved'");
             $dStmt->execute([$sid]);
             $damage = $dStmt->fetch(PDO::FETCH_ASSOC);
@@ -1095,6 +1856,7 @@ public function getEnrolledStudents($class_id) {
             $session['liability_status'] = $damage ? 'HasLiability' : 'Clean';
             $session['damage_id'] = $damage ? $damage['damage_id'] : null;
             $session['damage_db_status'] = $damage ? $damage['status'] : null;
+            $session['damage_notes'] = $damage ? $damage['notes'] : null;
             // NEW: Attach evidence image for student view
             $session['evidence_image'] = $damage ? $damage['evidence_image'] : null;
         }
@@ -1103,8 +1865,13 @@ public function getEnrolledStudents($class_id) {
     }
 
     // Submit proof of payment/replacement for a damaged item
-    public function submitDamageProof($damage_id, $file) {
+    public function submitDamageProof($damage_id, $settlement_mode, $file) {
         if (!$this->db) { return "Database Error"; }
+
+        // Validate settlement mode
+        if (!in_array($settlement_mode, ['payment', 'replacement'])) {
+            return "Invalid settlement mode specified.";
+        }
 
         $target_dir = __DIR__ . "/../uploads/settlements/";
         if (!file_exists($target_dir)) { mkdir($target_dir, 0777, true); }
@@ -1119,8 +1886,8 @@ public function getEnrolledStudents($class_id) {
 
         if (move_uploaded_file($file["tmp_name"], $target_file)) {
             try {
-                $sql = "UPDATE damaged_returns SET proof_image = ?, status = 'Under Review' WHERE damage_id = ?";
-                $this->db->prepare($sql)->execute([$new_name, $damage_id]);
+                $sql = "UPDATE damaged_returns SET proof_image = ?, status = 'Under Review', settlement_mode = ? WHERE damage_id = ?";
+                $this->db->prepare($sql)->execute([$new_name, $settlement_mode, $damage_id]);
                 return true;
             } catch (PDOException $e) { return "Database error."; }
         }
@@ -1128,17 +1895,22 @@ public function getEnrolledStudents($class_id) {
     }
 
 // Get settlement cases (damages) for admin/teacher view
-public function getSettlementCases($view = 'pending', $search = '', $class_id = '') {
+public function getSettlementCases($view = 'pending', $search = '', $class_id = '', $for_user_id = null) {
         if (!$this->db) { die("Database connection missing."); }
 
         // 1. Status Filter
-        $statusCondition = ($view === 'history') 
-            ? "dr.status = 'Resolved'" 
-            : "dr.status IN ('Unresolved', 'Under Review')";
+        if ($view === 'history') {
+            $statusCondition = "dr.status = 'Resolved'";
+        } elseif ($view === 'personal_all') {
+            $statusCondition = "1"; // No status filter, get all.
+        } else { // 'pending' is the default
+            $statusCondition = "dr.status IN ('Unresolved', 'Under Review')";
+        }
 
         $params = [];
         $searchLogic = "";
         $classLogic = "";
+        $userLogic = "";
 
         // 2. Search Filter
         if (!empty($search)) {
@@ -1159,6 +1931,12 @@ public function getSettlementCases($view = 'pending', $search = '', $class_id = 
             }
         }
 
+        // 4. User Filter for personal view
+        if ($for_user_id !== null) {
+            $userLogic = "AND dr.student_id = ?";
+            $params[] = $for_user_id;
+        }
+
         // 4. Main Query
         $sql = "SELECT 
                     dr.*, 
@@ -1166,22 +1944,29 @@ public function getSettlementCases($view = 'pending', $search = '', $class_id = 
                     m.Full_Name, 
                     m.ID_Number,
                     bs.CreatedAt as SlipDate,
+                    i.is_scalable,
                     COALESCE(la.Title, 'General Laboratory Use') as ActivityTitle,
                     bs.QR_Code_Data,
                     bs.Status as SlipStatus,
                     c.Class_Name, 
-                    c.Section
+                    c.Section,
+                    bi.Quantity as qty_borrowed,
+                    iv.Size_Value,
+                    iv.Unit
                 FROM damaged_returns dr
                 JOIN inventory i ON dr.item_id = i.ItemID
                 JOIN users u ON dr.student_id = u.UserID
                 JOIN lookup_masterlist m ON u.MasterID = m.MasterID
                 JOIN borrowing_sessions bs ON dr.session_id = bs.SessionID
+                LEFT JOIN borrowed_items bi ON dr.session_id = bi.SessionID AND dr.item_id = bi.ItemID
+                LEFT JOIN item_variants iv ON bi.VariantID = iv.VariantID
                 LEFT JOIN lab_activities la ON bs.ActivityID = la.ActivityID
                 LEFT JOIN activity_assignments aa ON la.ActivityID = aa.ActivityID
                 LEFT JOIN classes c ON aa.ClassID = c.ClassID
                 WHERE $statusCondition 
                 $searchLogic 
                 $classLogic
+                $userLogic
                 ORDER BY dr.logged_at DESC"; // Changed back to logged_at to be safe
 
         try {
@@ -1246,32 +2031,49 @@ public function getSettlementCases($view = 'pending', $search = '', $class_id = 
     }
 
     // Reject proof of settlement (Student must re-upload)
-    public function rejectDamage($damage_id) {
+    public function rejectDamage($damage_id, $rejection_notes = null) {
         if (!$this->db) { return false; }
         try {
-            // Reset status to Unresolved and clear the image proof
-            $sql = "UPDATE damaged_returns SET status = 'Unresolved', proof_image = NULL WHERE damage_id = ?";
-            return $this->db->prepare($sql)->execute([$damage_id]);
+            // Reset status to Unresolved, clear the image proof, and add rejection notes
+            $sql = "UPDATE damaged_returns SET status = 'Unresolved', proof_image = NULL, notes = ? WHERE damage_id = ?";
+            return $this->db->prepare($sql)->execute([$rejection_notes, $damage_id]);
         } catch (PDOException $e) { return false; }
     }
 
+    /**
+     * Counts the number of unresolved liabilities for a specific student.
+     * @param int $student_id The UserID of the student.
+     * @return int The number of unresolved cases.
+     */
+    public function countUnresolvedLiabilities($student_id) {
+        if (!$this->db) { return 0; }
+        try {
+            $sql = "SELECT COUNT(*) FROM damaged_returns WHERE student_id = ? AND status IN ('Unresolved', 'Under Review')";
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$student_id]);
+            return (int)$stmt->fetchColumn();
+        } catch (PDOException $e) {
+            error_log("countUnresolvedLiabilities Error: " . $e->getMessage());
+            return 0;
+        }
+    }
+
  // Create a new lab activity
-public function createActivity($title, $description, $deadline, $manualURL, $type, $sub_mode, $group_mode, $limit) {
+public function createActivity($title, $description, $deadline, $manualURL, $type, $group_mode, $limit) {
     try {
         // 'Manual_URL' is the column that stores the PDF path
         $sql = "INSERT INTO lab_activities 
-                (Title, Description, Deadline, Manual_URL, type, submission_mode, grouping_mode, group_limit) 
+                (Title, Description, Deadline, Manual_URL, type, grouping_mode, group_limit) 
                 VALUES 
-                (:title, :desc, :deadline, :manual, :type, :sub_mode, :grp_mode, :limit)";
+                (:title, :desc, :deadline, :manual, :type, :grp_mode, :limit)";
         
         $stmt = $this->db->prepare($sql);
         $stmt->execute([
             ':title'    => $title,
             ':desc'     => $description,
             ':deadline' => $deadline,
-            ':manual'   => $manualURL, // Stores 'uploads/manuals/filename.pdf'
+            ':manual'   => $manualURL,
             ':type'     => $type,
-            ':sub_mode' => $sub_mode,
             ':grp_mode' => $group_mode,
             ':limit'    => $limit 
         ]);
@@ -1280,6 +2082,62 @@ public function createActivity($title, $description, $deadline, $manualURL, $typ
     } catch (PDOException $e) {
         error_log("Create Activity Error: " . $e->getMessage());
         return false;
+    }
+}
+
+public function updateActivity($activityID, $title, $description, $deadline, $manualURL, $type, $group_mode, $limit, $assignedClasses, $requirements) {
+    try {
+        // This function is now part of a larger transaction in save_activity.php
+        $sql = "UPDATE lab_activities SET
+                    Title = :title,
+                    Description = :desc,
+                    Deadline = :deadline,
+                    type = :type,
+                    grouping_mode = :grp_mode,
+                    group_limit = :limit";
+        
+        // Only update manual URL if a new one was provided. A null value means no new file was uploaded.
+        if ($manualURL !== null) {
+            $sql .= ", Manual_URL = :manual";
+        }
+
+        $sql .= " WHERE ActivityID = :aid";
+
+        $stmt = $this->db->prepare($sql);
+        $params = [
+            ':title'    => $title,
+            ':desc'     => $description,
+            ':deadline' => $deadline,
+            ':type'     => $type,
+            ':grp_mode' => $group_mode,
+            ':limit'    => $limit,
+            ':aid'      => $activityID
+        ];
+        if ($manualURL !== null) {
+            $params[':manual'] = $manualURL;
+        }
+        $stmt->execute($params);
+
+        // 2. Clear and re-insert class assignments
+        $this->db->prepare("DELETE FROM activity_assignments WHERE ActivityID = ?")->execute([$activityID]);
+        if (!empty($assignedClasses)) {
+            foreach ($assignedClasses as $classID) {
+                $this->assignActivityToClass($activityID, $classID);
+            }
+        }
+
+        // 3. Clear and re-insert item requirements
+        $this->db->prepare("DELETE FROM activity_requirements WHERE ActivityID = ?")->execute([$activityID]);
+        if (!empty($requirements)) {
+            foreach ($requirements as $req) {
+                $this->addActivityRequirement($activityID, $req['id'], $req['qty'], $req['selectedVariantId'] ?? null);
+            }
+        }
+
+        return true;
+    } catch (Exception $e) {
+        error_log("Update Activity Error: " . $e->getMessage());
+        throw $e; // Re-throw exception to be caught by the main transaction handler
     }
 }
     
@@ -1383,16 +2241,10 @@ public function createActivity($title, $description, $deadline, $manualURL, $typ
     }
 
     // Automatically generate groups based on student stats (Smart Grouping)
-  public function generateSmartGroups($activityID, $classID, $limit) {
+    public function generateSmartGroups($activityID, $classID, $limit) {
         try {
-            // Fetch Students with Stats
-            $sql = "SELECT e.MasterID, 
-                           COALESCE(s.Total_Points, 0) as Points, 
-                           COALESCE(s.Avg_Contribution, 0) as Contrib 
-                    FROM class_enrollment e
-                    LEFT JOIN student_stats s ON e.MasterID = s.MasterID
-                    WHERE e.ClassID = :cid
-                    ORDER BY Contrib DESC, Points DESC"; 
+            // 1. Fetch all students from the class, no stats needed.
+            $sql = "SELECT e.MasterID FROM class_enrollment e WHERE e.ClassID = :cid";
             
             $stmt = $this->db->prepare($sql);
             $stmt->execute([':cid' => $classID]);
@@ -1401,66 +2253,65 @@ public function createActivity($title, $description, $deadline, $manualURL, $typ
             $totalStudents = count($students);
             if ($totalStudents === 0) return false;
 
+            // 2. Shuffle the students for random assignment.
+            shuffle($students);
+
             $numGroups = ceil($totalStudents / $limit);
             
-            // Create Group Containers
+            // 3. Create Group Containers
             $groupIds = [];
             for ($i = 1; $i <= $numGroups; $i++) {
                 $groupName = "Group " . $i;
                 $this->manualCreateGroup($activityID, $groupName);
-                
-                // Capture the ID of the new group
                 $newGroupID = $this->db->lastInsertId();
                 $groupIds[] = $newGroupID;
             }
 
-            // Distribute Students (Snake Pattern)
-            $currentGroupIndex = 0;
-            $direction = 1; 
-
+            // 4. Distribute Students sequentially into groups
+            $groupIndex = 0;
             foreach ($students as $student) {
-                $targetGroupID = $groupIds[$currentGroupIndex];
+                $targetGroupID = $groupIds[$groupIndex];
                 $this->manualAddMember($targetGroupID, $student['MasterID']);
-
-                $currentGroupIndex += $direction;
-                if ($currentGroupIndex >= $numGroups) {
-                    $currentGroupIndex = $numGroups - 1;
-                    $direction = -1; 
-                } elseif ($currentGroupIndex < 0) {
-                    $currentGroupIndex = 0;
-                    $direction = 1; 
-                }
+                
+                // Move to the next group, loop back to the start if at the end
+                $groupIndex = ($groupIndex + 1) % $numGroups;
             }
             
-            // Trigger Leader Nomination
+            // 5. Trigger random leader nomination
             if (!empty($groupIds)) {
                 $this->autoNominateLeaders($groupIds); 
             }
             return true;
-        } catch (PDOException $e) { return false; }
+        } catch (PDOException $e) { 
+            error_log("Smart Grouping Error: " . $e->getMessage()); // Log error
+            return false; 
+        }
     }
 
     // Automatically select the best leader for each group
     public function autoNominateLeaders($groupIds) {
         try {
             foreach ($groupIds as $gid) {
-                $sql = "SELECT gm.MemberID 
-                        FROM group_members gm
-                        LEFT JOIN student_stats ss ON gm.MasterID = ss.MasterID
-                        WHERE gm.GroupID = :gid
-                        ORDER BY COALESCE(ss.Leader_Count, 0) ASC, COALESCE(ss.Avg_Contribution, 0) DESC
-                        LIMIT 1";
+                // 1. Get all members of the group
+                $sql = "SELECT MemberID FROM group_members WHERE GroupID = :gid";
                 $stmt = $this->db->prepare($sql);
                 $stmt->execute([':gid' => $gid]);
-                $bestCandidate = $stmt->fetch(PDO::FETCH_ASSOC);
+                $members = $stmt->fetchAll(PDO::FETCH_COLUMN);
 
-                if ($bestCandidate) {
+                // 2. If there are members, pick one at random
+                if (!empty($members)) {
+                    $randomMemberId = $members[array_rand($members)];
+                    
+                    // 3. Set the randomly chosen member as leader
                     $updateSql = "UPDATE group_members SET Is_Leader = 1 WHERE MemberID = :mid";
-                    $this->db->prepare($updateSql)->execute([':mid' => $bestCandidate['MemberID']]);
+                    $this->db->prepare($updateSql)->execute([':mid' => $randomMemberId]);
                 }
             }
             return true;
-        } catch (PDOException $e) { return false; }
+        } catch (PDOException $e) { 
+            error_log("Leader Nomination Error: " . $e->getMessage()); // Log error
+            return false; 
+        }
     }
 
     // --- MANUAL GROUP MANAGEMENT FUNCTIONS ---
@@ -1485,23 +2336,20 @@ public function createActivity($title, $description, $deadline, $manualURL, $typ
 
     // Manually set the leader of a group
     public function manualSetLeader($groupID, $memberID) {
-        // Ensures ONLY ONE leader per group
-        $this->db->beginTransaction();
+        // This should be called within a transaction
         try {
             // 1. Reset everyone in this group to 0
             $s1 = $this->db->prepare("UPDATE group_members SET Is_Leader = 0 WHERE GroupID = :gid");
             $s1->execute([':gid' => $groupID]);
             
-            // 2. Set the specific member to 1 using subquery to find MemberID
+            // 2. Set the specific member to 1
             $s2 = $this->db->prepare("UPDATE group_members SET Is_Leader = 1 
                                       WHERE GroupID = :gid AND MasterID = :mid");
             $s2->execute([':gid' => $groupID, ':mid' => $memberID]);
             
-            $this->db->commit();
             return true;
         } catch (Exception $e) {
-            $this->db->rollBack();
-            return false;
+            throw $e; // Re-throw to be caught by the main transaction handler
         }
     }
 
@@ -1554,6 +2402,57 @@ public function createActivity($title, $description, $deadline, $manualURL, $typ
     }
     // Add this INSIDE class DataManager { ... }
 
+    public function getPaginatedActivitiesForClass($classId, $options = []) {
+        if (!$this->db || !$classId) {
+            return ['data' => [], 'total' => 0, 'pages' => 0];
+        }
+
+        $limit = $options['limit'] ?? 10;
+        $page = $options['page'] ?? 1;
+        $offset = ($page - 1) * $limit;
+        $search = $options['search'] ?? '';
+        $sort = $options['sort'] ?? 'newest';
+
+        $params = [':cid' => $classId];
+        $whereClauses = "aa.ClassID = :cid";
+
+        if (!empty($search)) {
+            $whereClauses .= " AND (a.Title LIKE :search OR a.Description LIKE :search)";
+            $params[':search'] = "%$search%";
+        }
+
+        // Sorting logic
+        $orderBy = "ORDER BY a.CreatedAt DESC"; // Default: newest first
+        if ($sort === 'oldest') {
+            $orderBy = "ORDER BY a.CreatedAt ASC";
+        } elseif ($sort === 'deadline') {
+            $orderBy = "ORDER BY a.Deadline ASC";
+        }
+
+        // Base query
+        $baseQuery = "FROM lab_activities a
+                    JOIN activity_assignments aa ON a.ActivityID = aa.ActivityID
+                    WHERE $whereClauses";
+
+        // Count total records
+        $countQuery = "SELECT COUNT(DISTINCT a.ActivityID) " . $baseQuery;
+        $countStmt = $this->db->prepare($countQuery);
+        $countStmt->execute($params);
+        $totalRecords = (int) $countStmt->fetchColumn();
+        $totalPages = ceil($totalRecords / $limit);
+
+        $dataQuery = "SELECT a.* " . $baseQuery . " GROUP BY a.ActivityID " . $orderBy . " LIMIT :limit OFFSET :offset";
+
+        $stmt = $this->db->prepare($dataQuery);
+        foreach ($params as $key => &$val) { $stmt->bindParam($key, $val); }
+        $stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $stmt->execute();
+        $activities = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return ['data' => $activities, 'total' => $totalRecords, 'pages' => $totalPages];
+    }
+
 // Get a list of students from multiple classes (for Roster generation)
 public function getStudentsByClassList($classIdArray) {
     if (empty($classIdArray)) return [];
@@ -1589,6 +2488,51 @@ public function getStudentsByClassList($classIdArray) {
     $stmt->execute();
     return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
+
+public function previewSmartGroups($classIdArray, $limit) {
+        if (empty($classIdArray) || $limit <= 0) {
+            return [];
+        }
+
+        // 1. Fetch all students from the selected classes
+        $students = $this->getStudentsByClassList($classIdArray);
+        if (empty($students)) {
+            return [];
+        }
+
+        // 2. Shuffle for randomness
+        shuffle($students);
+
+        $totalStudents = count($students);
+        $numGroups = ceil($totalStudents / $limit);
+        $groups = [];
+
+        // 3. Create logical group structures
+        for ($i = 1; $i <= $numGroups; $i++) {
+            $groups[$i] = [
+                'name' => 'Group ' . $i,
+                'members' => []
+            ];
+        }
+
+        // 4. Distribute students into the logical groups
+        $groupIndex = 1;
+        foreach ($students as $student) {
+            $groups[$groupIndex]['members'][] = ['MasterID' => $student['MasterID'], 'Full_Name' => $student['Full_Name'], 'isLeader' => false];
+            $groupIndex = ($groupIndex % $numGroups) + 1;
+        }
+
+        // 5. Nominate a random leader for each group
+        foreach ($groups as &$group) {
+            if (!empty($group['members'])) {
+                $leaderIndex = array_rand($group['members']);
+                $group['members'][$leaderIndex]['isLeader'] = true;
+            }
+        }
+
+        return array_values($groups);
+    }
+
     // --- STUDENT STATUS ENGINE ---
 
     // Check a student's status for a specific activity (Group, Leader, etc.)
@@ -1601,18 +2545,12 @@ public function getStudentsByClassList($classIdArray) {
         $stmt->execute([$studentID, $activityID]);
         $group = $stmt->fetch(PDO::FETCH_ASSOC);
 
-        $submission = null;
         $groupID = $group['GroupID'] ?? null;
 
         return [
-            'has_group' => !empty($groupID), // <--- FIXED: Replaced '?' with '!empty()'
+            'has_group' => !empty($groupID),
             'group_id' => $groupID,
-            'is_leader' => $group['Is_Leader'] ?? 0,
-            'submission' => null,
-            'status' => 'Pending',
-            'grade' => null,
-            'feedback' => null,
-            'is_locked' => false 
+            'is_leader' => $group['Is_Leader'] ?? 0
         ];
     }
 
@@ -1622,59 +2560,87 @@ public function getStudentsByClassList($classIdArray) {
     public function getLogisticsOverview($activityID, $groupID) {
         // Fetch Teacher's Requirements
         $reqs = $this->getActivityRequirements($activityID);
-        
+
         // Fetch what has already been assigned
-        $sql = "SELECT ItemID, SUM(Quantity) as Assigned_Qty FROM group_logistics 
-                WHERE ActivityID = ? AND GroupID = ? GROUP BY ItemID";
+        $sql = "SELECT ItemID, VariantID, SUM(Quantity) as Assigned_Qty FROM group_logistics
+                WHERE ActivityID = ? AND GroupID = ? GROUP BY ItemID, VariantID";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([$activityID, $groupID]);
-        $assigned = $stmt->fetchAll(PDO::FETCH_KEY_PAIR); // [ItemID => Qty]
+        $assignedRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $assignedSummary = [];
+        foreach ($assignedRows as $row) {
+            $key = "{$row['ItemID']}_" . ($row['VariantID'] ?? '0');
+            $assignedSummary[$key] = $row['Assigned_Qty'];
+        }
+
+        // NEW: Fetch detailed assignments, including the LogisticsID for undo operations
+        $detailSql = "SELECT gl.LogisticsID, gl.ItemID, gl.VariantID, gl.AssignedToMasterID, gl.Quantity, lm.Full_Name
+                      FROM group_logistics gl
+                      JOIN lookup_masterlist lm ON gl.AssignedToMasterID = lm.MasterID
+                      WHERE gl.ActivityID = ? AND gl.GroupID = ?
+                      ORDER BY lm.Full_Name";
+        $detailStmt = $this->db->prepare($detailSql);
+        $detailStmt->execute([$activityID, $groupID]);
+        $detailedAssignments = $detailStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Group detailed assignments by ItemID
+        $assignmentsByItem = [];
+        foreach ($detailedAssignments as $assignment) {
+            $key = "{$assignment['ItemID']}_" . ($assignment['VariantID'] ?? '0');
+            $assignmentsByItem[$key][] = $assignment;
+        }
 
         // Merge Data
         foreach ($reqs as &$item) {
-            $item['Distributed'] = $assigned[$item['ItemID']] ?? 0;
+            $key = "{$item['ItemID']}_" . ($item['VariantID'] ?? '0');
+            $item['Distributed'] = $assignedSummary[$key] ?? 0;
             $item['Remaining'] = max(0, $item['Required_Qty'] - $item['Distributed']);
+            $item['Assignments'] = $assignmentsByItem[$key] ?? [];
         }
         return $reqs;
     }
 
-    // Assign an item to a specific group member (Leader Action)
-    public function distributeItem($activityID, $groupID, $itemID, $targetMasterID, $qty) {
-        $sql = "INSERT INTO group_logistics (ActivityID, GroupID, ItemID, AssignedToMasterID, Quantity) 
-                VALUES (?, ?, ?, ?, ?)";
-        $stmt = $this->db->prepare($sql);
-        return $stmt->execute([$activityID, $groupID, $itemID, $targetMasterID, $qty]);
+    // Bulk assign items, clearing previous assignments (Leader Action)
+    public function bulkDistributeItems($activityID, $groupID, $assignments) {
+        try {
+            $this->db->beginTransaction();
+
+            // 1. Clear existing distributions for this group/activity
+            $deleteSql = "DELETE FROM group_logistics WHERE ActivityID = ? AND GroupID = ?";
+            $deleteStmt = $this->db->prepare($deleteSql);
+            $deleteStmt->execute([$activityID, $groupID]);
+
+            // 2. Insert new assignments
+            $insertSql = "INSERT INTO group_logistics (ActivityID, GroupID, ItemID, AssignedToMasterID, Quantity, VariantID)
+                          VALUES (?, ?, ?, ?, ?, ?)";
+            $insertStmt = $this->db->prepare($insertSql);
+
+            foreach ($assignments as $assignment) {
+                // Basic validation
+                if (isset($assignment['item_id'], $assignment['target_id'], $assignment['qty']) && $assignment['qty'] > 0) {
+                    $insertStmt->execute([$activityID, $groupID, $assignment['item_id'], $assignment['target_id'], $assignment['qty'], $assignment['variant_id'] ?? null]);
+                }
+            }
+
+            $this->db->commit();
+            return true;
+        } catch (Exception $e) {
+            if ($this->db->inTransaction()) $this->db->rollBack();
+            error_log("Bulk Distribution Error: " . $e->getMessage());
+            return false;
+        }
     }
 
     // Get the items assigned to the logged-in student
     public function getMyAssignedItems($activityID, $groupID, $myMasterID) {
-        $sql = "SELECT gl.ItemID, gl.Quantity as Required_Qty, i.Item_Name 
+        $sql = "SELECT gl.ItemID, gl.Quantity as Required_Qty, i.Item_Name, i.is_consumable, i.is_scalable, gl.VariantID, iv.Size_Value, iv.Unit
                 FROM group_logistics gl
                 JOIN inventory i ON gl.ItemID = i.ItemID
+                LEFT JOIN item_variants iv ON gl.VariantID = iv.VariantID
                 WHERE gl.ActivityID = ? AND gl.GroupID = ? AND gl.AssignedToMasterID = ?";
         $stmt = $this->db->prepare($sql);
         $stmt->execute([$activityID, $groupID, $myMasterID]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
-
-    // Check if all items have been distributed to members
-    public function getDistributionStats($activityID, $groupID) {
-        // 1. Check Remaining Items (We keep this)
-        $reqs = $this->getLogisticsOverview($activityID, $groupID);
-        $remainingItems = 0;
-        foreach($reqs as $r) { $remainingItems += $r['Remaining']; }
-
-        // 2. Check Unassigned Members (DISABLED for flexibility)
-        // We set this to empty so it doesn't block the button
-        $freeloaders = []; 
-
-        return [
-            // Logic Change: Only check if remaining items are 0
-            'is_complete' => ($remainingItems == 0), 
-            'remaining_items_count' => $remainingItems,
-            'freeloaders' => $freeloaders
-        ];
-    }
-    
 }
 }

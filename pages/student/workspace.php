@@ -100,7 +100,7 @@ $progress = (count($sections) > 0) ? ($completedCount / count($sections)) * 100 
 <?php endif; ?>
                 <header class="mb-12 flex flex-col lg:flex-row lg:items-end justify-between gap-6">
                     <div>
-                        <a href="activity_view.php?activity_id=<?= $activity_id ?>" class="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2 flex items-center gap-2 hover:gap-3 transition-all">
+                        <a href="activity_view.php?activity_id=<?= $activity_id ?>&class_id=<?= $activity['ClassID'] ?>" class="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-2 flex items-center gap-2 hover:gap-3 transition-all">
                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M15 19l-7-7 7-7"/></svg>
                             Back to Lab Manual
                         </a>
@@ -353,5 +353,6 @@ $progress = (count($sections) > 0) ? ($completedCount / count($sections)) * 100 
             }
         }
     </script>
+    <?php include '../../includes/layout_footer.php'; ?>
 </body>
 </html>

@@ -23,66 +23,6 @@ $isGroupActivity = ($activityInfo['type'] === 'Group');
 $deadline = $activityInfo['Deadline'];
 $listItems = [];
 
-// 3. Fetch Data Based on Mode
-if ($isGroupActivity) {
-    // --- GROUP MODE: Fetch Groups + Submission Status ---
-    $sql = "SELECT ag.GroupID, ag.GroupName, 
-                   ls.Status, ls.Submitted_At as SubmissionDate, ls.Grade, ls.SubmissionID
-            FROM activity_groups ag
-            LEFT JOIN lab_submissions ls ON ag.GroupID = ls.GroupID AND ls.ActivityID = ?
-            WHERE ag.ActivityID = ?";
-    
-    $stmt = $db->db->prepare($sql);
-    $stmt->execute([$activity_id, $activity_id]);
-    $groups = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    foreach ($groups as $g) {
-        // Fetch Members for this group
-        $memSql = "SELECT lm.Full_Name 
-                   FROM group_members gm 
-                   JOIN lookup_masterlist lm ON gm.MasterID = lm.MasterID 
-                   WHERE gm.GroupID = ?";
-        $mStmt = $db->db->prepare($memSql);
-        $mStmt->execute([$g['GroupID']]);
-        $members = $mStmt->fetchAll(PDO::FETCH_COLUMN);
-
-        $listItems[] = [
-            'SubmissionID' => $g['SubmissionID'], // Null if not submitted
-            'GroupName' => $g['GroupName'],
-            'Members' => $members,
-            'Status' => $g['Status'] ?? 'Unsubmitted',
-            'SubmissionDate' => $g['SubmissionDate'],
-            'Grade' => $g['Grade'],
-            // Extra data for the grader link
-            'GroupID' => $g['GroupID'] 
-        ];
-    }
-
-} else {
-    // --- INDIVIDUAL MODE: Fetch All Enrolled Students + Submission Status ---
-    // Links: Activity -> Class -> Enrollment -> MasterList -> Users -> Submissions
-    $sql = "SELECT lm.Full_Name, 
-                   ls.Status, ls.Submitted_At as SubmissionDate, ls.Grade, ls.SubmissionID
-            FROM activity_assignments aa
-            JOIN class_enrollment ce ON aa.ClassID = ce.ClassID
-            JOIN lookup_masterlist lm ON ce.MasterID = lm.MasterID
-            LEFT JOIN users u ON lm.MasterID = u.MasterID
-            LEFT JOIN lab_submissions ls ON ls.ActivityID = ? AND ls.StudentID = u.UserID
-            WHERE aa.ActivityID = ?
-            ORDER BY lm.Full_Name ASC";
-
-    $stmt = $db->db->prepare($sql);
-    $stmt->execute([$activity_id, $activity_id]);
-    $students = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-    foreach ($students as $s) {
-        $listItems[] = [
-            'SubmissionID' => $s['SubmissionID'],
-            'Full_Name' => $s['Full_Name'],
-            'Status' => $s['Status'] ?? 'Unsubmitted',
-            'SubmissionDate' => $s['SubmissionDate'],
-            'Grade' => $s['Grade']
-        ];
-    }
-}
+// This file is deprecated as lab_submissions table involvement is removed.
+// Returning an empty array to prevent errors.
 ?>

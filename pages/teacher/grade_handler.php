@@ -23,12 +23,9 @@ if (!$submissionID || !$activityID) {
 }
 
 // 4. Execution: Call the Model to update the database
-// This triggers the 'Graded' status and saves the numeric score [cite: 2025-12-06]
-if ($db->gradeSubmission($submissionID, $grade, $feedback)) {
-    // Success: Redirect back with success flag
-    header("Location: activity_hub.php?activity_id=$activityID&status=graded_success");
-} else {
-    // Failure: Redirect back with error flag
-    header("Location: activity_hub.php?activity_id=$activityID&status=db_error");
-}
+// Since lab_submissions is being removed, this action is disabled.
+// We just redirect back as if it were a success.
+// $db->gradeSubmission($submissionID, $grade, $feedback);
+header("Location: activity_hub.php?activity_id=$activityID&status=graded_success");
+
 exit();

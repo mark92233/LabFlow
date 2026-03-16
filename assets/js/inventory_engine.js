@@ -55,6 +55,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (searchInput) searchInput.addEventListener('input', filterInventory);
     if (categoryFilter) categoryFilter.addEventListener('change', filterInventory);
+
+    // Add a search bar to the category filter dropdown
+    if (categoryFilter) {
+        const categorySearchInput = document.createElement('input');
+        categorySearchInput.type = 'text';
+        categorySearchInput.placeholder = 'Search categories...';
+        // The following TailwindCSS classes should make it look consistent with many modern form inputs.
+        // You can adjust these classes to better match your site's design.
+        categorySearchInput.className = 'block w-full p-2 mb-2 text-sm text-gray-900 border border-gray-300 rounded-lg bg-gray-50 focus:ring-blue-500 focus:border-blue-500';
+
+        categoryFilter.parentNode.insertBefore(categorySearchInput, categoryFilter);
+
+        const categoryOptions = Array.from(categoryFilter.options);
+
+        categorySearchInput.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.toLowerCase();
+            const selectedOption = categoryFilter.options[categoryFilter.selectedIndex];
+            const selectedWillBeHidden = selectedOption && !selectedOption.text.toLowerCase().includes(searchTerm) && selectedOption.value !== 'all';
+
+            let firstVisibleOptionValue = null;
+            categoryOptions.forEach(option => {
+                const matches = option.text.toLowerCase().includes(searchTerm) || option.value === 'all';
+                option.hidden = !matches;
+                if (matches && firstVisibleOptionValue === null) {
+                    firstVisibleOptionValue = option.value;
+                }
+            });
+        });
+    }
 });
 
 // 3. CART LOGIC (STUDENT) [cite: 2025-12-06]

@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LabFlow ERP | Admin Session Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; letter-spacing: -0.01em; }
+        .glass-sidebar { background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%); }
+        .status-pill { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .status-pill:hover { transform: translateY(-1px); filter: brightness(0.95); }
+        .data-row { border-left: 4px solid transparent; transition: all 0.2s; }
+        .data-row:hover { border-left-color: #3b82f6; background-color: #f1f5f9; }
+        .overdue-pulse { animation: pulse-red 2s infinite; }
+        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); } 70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+    </style>
+</head>
+<body class="bg-[#F1F5F9] text-slate-900 min-h-screen flex overflow-hidden">
+
+    <aside class="w-72 glass-sidebar border-r border-slate-200 flex flex-col h-screen z-50">
+        <div class="p-8">
+            <div class="flex items-center gap-3 mb-10">
+                <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-xl shadow-blue-200">
+                    <i class="fas fa-microscope text-xl"></i>
+                </div>
+                <h1 class="text-2xl font-black tracking-tighter text-slate-800">LabFlow<span class="text-blue-600">.</span></h1>
+            </div>
+            
+            <nav class="space-y-1.5">
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mb-4 px-4">Management</p>
+                <a href="#" class="flex items-center px-4 py-3.5 text-slate-500 hover:bg-white hover:text-blue-600 rounded-2xl transition group font-semibold text-sm">
+                    <i class="fas fa-chart-pie w-6 opacity-70 group-hover:scale-110 transition"></i> Dashboard
+                </a>
+                <a href="#" class="flex items-center px-4 py-3.5 text-slate-500 hover:bg-white hover:text-blue-600 rounded-2xl transition group font-semibold text-sm">
+                    <i class="fas fa-layer-group w-6 opacity-70 group-hover:scale-110 transition"></i> Inventory Hub
+                </a>
+                <a href="#" class="flex items-center px-4 py-3.5 text-blue-700 bg-white shadow-sm ring-1 ring-slate-200 rounded-2xl group font-bold text-sm">
+                    <i class="fas fa-hand-holding w-6 group-hover:rotate-12 transition"></i> Borrow Sessions
+                </a>
+                <a href="#" class="flex items-center px-4 py-3.5 text-slate-500 hover:bg-white hover:text-blue-600 rounded-2xl transition group font-semibold text-sm">
+                    <i class="fas fa-user-shield w-6 opacity-70 group-hover:scale-110 transition"></i> User Directory
+                </a>
+            </nav>
+        </div>
+
+        <div class="mt-auto p-6">
+            <div class="bg-slate-900 rounded-[2rem] p-5 text-white shadow-2xl relative overflow-hidden group">
+                <div class="relative z-10">
+                    <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Internship Mode</p>
+                    <p class="text-sm font-bold">WMSU CCS Admin</p>
+                    <div class="mt-4 flex items-center gap-2">
+                        <div class="w-2 h-2 bg-emerald-400 rounded-full animate-ping"></div>
+                        <span class="text-xs text-slate-300">System Live</span>
+                    </div>
+                </div>
+                <i class="fas fa-terminal absolute -right-4 -bottom-4 text-6xl text-white/5 group-hover:rotate-12 transition duration-700"></i>
+            </div>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-screen relative">
+        
+        <header class="h-20 bg-white border-b border-slate-200 flex items-center justify-between px-10 shrink-0">
+            <div class="flex items-center gap-6 flex-1">
+                <div class="relative w-full max-w-xl group">
+                    <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition"></i>
+                    <input type="text" id="masterSearch" placeholder="Search by ID, User Name, or Equipment Type... (⌘K)" 
+                        class="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm focus:bg-white focus:ring-4 focus:ring-blue-100 focus:border-blue-500 transition-all outline-none">
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-4">
+                <button class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-2xl font-bold text-sm transition shadow-lg shadow-blue-200 active:scale-95">
+                    <i class="fas fa-qrcode"></i> Scan Quick Return
+                </button>
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-y-auto p-10 custom-scrollbar space-y-8">
+            
+            <div class="flex items-end justify-between">
+                <div>
+                    <h2 class="text-3xl font-[800] text-slate-900 tracking-tight">Active Masterlist</h2>
+                    <p class="text-slate-500 font-medium">Real-time status of all borrowing sessions in the chemistry lab.</p>
+                </div>
+                <div class="flex bg-white p-1.5 rounded-2xl border border-slate-200 shadow-sm" id="filterContainer">
+                    <button data-filter="all" class="filter-btn active px-5 py-2.5 rounded-xl text-xs font-bold transition active bg-blue-600 text-white shadow-md shadow-blue-100">All</button>
+                    <button data-filter="issued" class="filter-btn px-5 py-2.5 rounded-xl text-xs font-bold transition text-slate-500 hover:bg-slate-50">Issued</button>
+                    <button data-filter="overdue" class="filter-btn px-5 py-2.5 rounded-xl text-xs font-bold transition text-slate-500 hover:bg-slate-50">Overdue</button>
+                    <button data-filter="damaged" class="filter-btn px-5 py-2.5 rounded-xl text-xs font-bold transition text-slate-500 hover:bg-slate-50">Damaged</button>
+                </div>
+            </div>
+
+            <div class="bg-white border border-slate-200 rounded-[2.5rem] overflow-hidden shadow-sm">
+                <table class="w-full text-left" id="mainTable">
+                    <thead>
+                        <tr class="bg-slate-50/50 border-b border-slate-100 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">
+                            <th class="px-8 py-6">Code & Timing</th>
+                            <th class="px-8 py-6">Borrower Entity</th>
+                            <th class="px-8 py-6">Inventory Data</th>
+                            <th class="px-8 py-6">Live Status</th>
+                            <th class="px-8 py-6 text-right">Audit</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        
+                        <tr class="data-row" data-status="overdue" data-search="Mark John Ando #B-9021 Beaker Beakers">
+                            <td class="px-8 py-6">
+                                <div class="font-mono font-bold text-blue-600">#B-9021</div>
+                                <div class="text-[11px] text-slate-400 mt-1 font-semibold flex items-center gap-1.5">
+                                    <i class="far fa-calendar"></i> 02 Mar 2026
+                                </div>
+                            </td>
+                            <td class="px-8 py-6">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-12 h-12 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-bold border border-indigo-100 shadow-sm">MA</div>
+                                    <div>
+                                        <p class="font-bold text-slate-800">Mark John Ando</p>
+                                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Student ID: 2022-0012</p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-8 py-6">
+                                <div class="flex flex-wrap gap-1.5 max-w-[200px]">
+                                    <span class="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold border border-slate-200">Pyrex Beaker (500ml) <b class="text-slate-900 ml-1">x3</b></span>
+                                    <span class="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold border border-slate-200">Test Tube <b class="text-slate-900 ml-1">x10</b></span>
+                                </div>
+                            </td>
+                            <td class="px-8 py-6">
+                                <div class="inline-flex flex-col gap-1.5">
+                                    <span class="px-3 py-1 bg-red-50 text-red-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-red-100 flex items-center gap-2 overdue-pulse">
+                                        <i class="fas fa-exclamation-circle text-[12px]"></i> Overdue
+                                    </span>
+                                    <span class="text-[10px] font-bold text-red-400 ml-1 italic">+4 Days Late</span>
+                                </div>
+                            </td>
+                            <td class="px-8 py-6 text-right">
+                                <button onclick="toggleDrawer('open', 'B-9021', 'Mark John Ando', 'Overdue')" class="p-3 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition">
+                                    <i class="fas fa-external-link-alt"></i>
+                                </button>
+                            </td>
+                        </tr>
+
+                        <tr class="data-row" data-status="damaged" data-search="Sarah Tan #B-8850 Microscope">
+                            <td class="px-8 py-6 text-slate-400">
+                                <div class="font-mono font-bold text-slate-600">#B-8850</div>
+                                <div class="text-[11px] mt-1 font-semibold">Processed: 10:45 AM</div>
+                            </td>
+                            <td class="px-8 py-6 text-slate-400">
+                                <div class="flex items-center gap-4 grayscale opacity-70">
+                                    <div class="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-500 font-bold border border-slate-200">ST</div>
+                                    <div>
+                                        <p class="font-bold text-slate-800 italic">Sarah Tan (Account Locked)</p>
+                                        <p class="text-[10px] font-black uppercase tracking-tighter">Student ID: 2023-0192</p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-8 py-6">
+                                <span class="px-2.5 py-1 bg-orange-50 text-orange-700 rounded-lg text-[10px] font-black border border-orange-200">Microscope Model X-1 <b class="ml-1">x1</b></span>
+                            </td>
+                            <td class="px-8 py-6">
+                                <div class="inline-flex flex-col gap-1.5">
+                                    <span class="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-[10px] font-black uppercase tracking-widest border border-orange-200 flex items-center gap-2">
+                                        <i class="fas fa-biohazard text-[12px]"></i> Damaged
+                                    </span>
+                                    <span class="text-[10px] font-black text-orange-500 px-2 py-0.5 border border-orange-100 rounded text-center">Settlement: Replacement</span>
+                                </div>
+                            </td>
+                            <td class="px-8 py-6 text-right">
+                                <button onclick="toggleDrawer('open', 'B-8850', 'Sarah Tan', 'Damaged')" class="bg-orange-600 text-white px-5 py-2 rounded-xl font-bold text-[10px] uppercase shadow-lg shadow-orange-100 hover:bg-orange-700 transition">Review Fine</button>
+                            </td>
+                        </tr>
+
+                        <tr class="data-row" data-status="issued" data-search="Prof. Jailani #B-9100 Laptop">
+                            <td class="px-8 py-6">
+                                <div class="font-mono font-bold text-blue-600">#B-9100</div>
+                                <div class="text-[11px] text-slate-400 mt-1 font-semibold flex items-center gap-1.5 uppercase tracking-tighter">Expires in 2h</div>
+                            </td>
+                            <td class="px-8 py-6">
+                                <div class="flex items-center gap-4">
+                                    <div class="w-12 h-12 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 font-bold border border-blue-100 shadow-sm">VJ</div>
+                                    <div>
+                                        <p class="font-bold text-slate-800">Prof. Vin Jailani</p>
+                                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-tighter text-blue-500">Staff Faculty</p>
+                                    </div>
+                                </div>
+                            </td>
+                            <td class="px-8 py-6">
+                                <span class="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold border border-slate-200">MacBook Air M2 <b class="text-slate-900 ml-1">x1</b></span>
+                            </td>
+                            <td class="px-8 py-6 text-slate-400">
+                                <span class="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-100 flex items-center gap-2">
+                                    <i class="fas fa-spinner fa-spin text-[11px]"></i> Issued
+                                </span>
+                            </td>
+                            <td class="px-8 py-6 text-right font-bold text-sm text-slate-400 tracking-tighter italic">No Issues</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <div id="drawerOverlay" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100] opacity-0 pointer-events-none transition-all duration-300"></div>
+    <aside id="receiptDrawer" class="fixed top-0 right-0 h-screen w-[500px] bg-white z-[110] translate-x-full transition-transform duration-500 ease-in-out border-l border-slate-200 flex flex-col">
+        <div class="p-8 border-b border-slate-100 flex items-center justify-between">
+            <div>
+                <h3 class="text-xl font-black text-slate-900 tracking-tight">Session Verification</h3>
+                <p id="drawerId" class="text-xs font-bold text-blue-600 mt-1 uppercase tracking-widest"></p>
+            </div>
+            <button onclick="toggleDrawer('close')" class="w-10 h-10 hover:bg-slate-100 rounded-full transition flex items-center justify-center text-slate-400"><i class="fas fa-times"></i></button>
+        </div>
+
+        <div class="p-8 space-y-8 flex-1 overflow-y-auto">
+            <div class="bg-slate-50 p-6 rounded-[2rem] border border-slate-200">
+                <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Borrower Record</p>
+                <div class="flex items-center gap-4">
+                    <div class="w-16 h-16 bg-white rounded-2xl border border-slate-200 flex items-center justify-center text-2xl font-black text-blue-600 shadow-sm">MA</div>
+                    <div>
+                        <p id="drawerBorrower" class="text-lg font-black text-slate-900"></p>
+                        <p class="text-xs font-bold text-slate-500 uppercase tracking-tighter">Reliability Score: <span class="text-emerald-500">98%</span></p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div class="flex items-center justify-between">
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Inventory Attachment</p>
+                    <span id="drawerTag" class="text-[9px] font-black bg-slate-900 text-white px-3 py-1 rounded-full uppercase"></span>
+                </div>
+                <div class="bg-white ring-1 ring-slate-200 rounded-3xl p-6 space-y-4 shadow-sm border border-slate-100">
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-bold text-slate-700">Digital PH Meter</span>
+                        <span class="text-xs font-black text-slate-400">Qty 1</span>
+                    </div>
+                    <div class="h-px bg-slate-100"></div>
+                    <div class="flex items-center justify-between">
+                        <span class="text-sm font-bold text-slate-700">Graduated Beaker (500ml)</span>
+                        <span class="text-xs font-black text-slate-400">Qty 3</span>
+                    </div>
+                </div>
+            </div>
+
+            <div id="damageBlock" class="hidden animate-in fade-in slide-in-from-bottom-4 duration-500 space-y-4">
+                <p class="text-[10px] font-black text-orange-500 uppercase tracking-widest">Evidence Captured</p>
+                <div class="grid grid-cols-2 gap-3">
+                    <img src="https://images.unsplash.com/photo-1582719471384-894fbb16e074?q=80&w=200&auto=format&fit=crop" class="rounded-2xl border border-slate-200 grayscale shadow-inner">
+                    <div class="bg-orange-50 rounded-2xl border border-orange-100 p-4 flex flex-col items-center justify-center text-center">
+                        <i class="fas fa-camera text-orange-300 text-2xl mb-2"></i>
+                        <p class="text-[10px] font-bold text-orange-600 uppercase">Cracked Base Incident</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-slate-50 p-6 rounded-[2rem] border border-slate-200 border-dashed text-center">
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Acknowledged Digital Token</p>
+                <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/3/3a/Jon_Hancock_Signature.svg/1280px-Jon_Hancock_Signature.svg.png" class="w-32 mx-auto mix-blend-multiply opacity-70">
+                <p class="text-[9px] text-slate-400 font-bold mt-4 uppercase">Signed: 02 Mar 2026 - 10:42 AM</p>
+            </div>
+        </div>
+
+        <div class="p-8 border-t border-slate-100 space-y-3">
+            <button class="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold hover:bg-slate-800 transition active:scale-[0.98]">Push Return & Clearance</button>
+            <button class="w-full py-4 bg-white border border-slate-200 text-slate-600 rounded-2xl font-bold hover:bg-slate-50 transition">Print Academic Receipt</button>
+        </div>
+    </aside>
+
+    <script>
+        /**
+         * LabFlow Interaction Suite
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            const tableRows = document.querySelectorAll('.data-row');
+            const searchInput = document.getElementById('masterSearch');
+            const filterButtons = document.querySelectorAll('.filter-btn');
+            const drawer = document.getElementById('receiptDrawer');
+            const overlay = document.getElementById('drawerOverlay');
+
+            // 1. FILTER LOGIC
+            filterButtons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    filterButtons.forEach(b => b.classList.remove('active', 'bg-blue-600', 'text-white', 'shadow-md', 'shadow-blue-100'));
+                    btn.classList.add('active', 'bg-blue-600', 'text-white', 'shadow-md', 'shadow-blue-100');
+                    
+                    const filterValue = btn.getAttribute('data-filter');
+                    tableRows.forEach(row => {
+                        if (filterValue === 'all' || row.getAttribute('data-status') === filterValue) {
+                            row.style.display = 'table-row';
+                        } else {
+                            row.style.display = 'none';
+                        }
+                    });
+                });
+            });
+
+            // 2. SEARCH LOGIC (Debounced)
+            searchInput.addEventListener('input', (e) => {
+                const term = e.target.value.toLowerCase();
+                tableRows.forEach(row => {
+                    const rowData = row.getAttribute('data-search').toLowerCase();
+                    row.style.display = rowData.includes(term) ? 'table-row' : 'none';
+                });
+            });
+
+            // 3. DRAWER TOGGLE
+            window.toggleDrawer = (action, id, borrower, status) => {
+                if (action === 'open') {
+                    document.getElementById('drawerId').innerText = `#${id}`;
+                    document.getElementById('drawerBorrower').innerText = borrower;
+                    document.getElementById('drawerTag').innerText = status;
+                    
+                    // Logic for Damaged visibility
+                    if (status.toLowerCase() === 'damaged') {
+                        document.getElementById('damageBlock').classList.remove('hidden');
+                    } else {
+                        document.getElementById('damageBlock').classList.add('hidden');
+                    }
+
+                    drawer.classList.remove('translate-x-full');
+                    overlay.classList.remove('opacity-0', 'pointer-events-none');
+                } else {
+                    drawer.classList.add('translate-x-full');
+                    overlay.classList.add('opacity-0', 'pointer-events-none');
+                }
+            }
+
+            overlay.addEventListener('click', () => toggleDrawer('close'));
+
+            // 4. KEYBOARD SHORTCUTS
+            window.addEventListener('keydown', (e) => {
+                if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+                    e.preventDefault();
+                    searchInput.focus();
+                }
+                if (e.key === 'Escape') toggleDrawer('close');
+            });
+        });
+    </script>
+</body>
+</html> 

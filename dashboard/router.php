@@ -1,16 +1,26 @@
 <?php
 session_start();
 
-// Security: If not logged in, kick back to landing page
 if (!isset($_SESSION['user_id'])) {
     header("Location: ../index.php");
     exit();
 }
 
-// Redirect based on the Role stored during login/registration
-if ($_SESSION['user_role'] === 'Teacher' || $_SESSION['user_role'] === 'Admin') {
-    header("Location: admin_dash.php");
-} else {
-    header("Location: student_dash.php");
+$role = $_SESSION['user_role'] ?? 'Guest';
+
+switch ($role) {
+    case 'Admin':
+        header("Location: admin_dash.php");
+        break;
+    case 'Teacher':
+        header("Location: teacher_dash.php");
+        break;
+    case 'Student':
+        header("Location: student_dash.php");
+        break;
+    default:
+        header("Location: ../logout.php");
+        break;
 }
 exit();
+?>

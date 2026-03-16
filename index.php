@@ -11,9 +11,6 @@ if (file_exists('dbRelated/EmailSender.php')) {
 }
 
 // --- INITIALIZATION ---
-$status = ""; 
-$error = ""; 
-$success_msg = "";
 $showModal = false; 
 $step = 1; 
 
@@ -33,167 +30,35 @@ if (isset($_GET['action']) && $_GET['action'] === 'reset') {
     exit();
 }
 
-// --- CHECK SYSTEM STATUS ---
+// --- INITIALIZATION ---
+$initialState = ['step' => 1, 'showModal' => false, 'data' => []];
 try {
     $dataMgr = new DataManager();
     $status = "✅ System Pulse: Online";
+
+    // --- STATE MANAGEMENT (Determine Step based on Session) ---
+    if (isset($_SESSION['login_id']) && !isset($_SESSION['user_id'])) {
+        $initialState['step'] = 2;
+        $initialState['showModal'] = true;
+        $initialState['data']['user_name'] = $_SESSION['temp_name'] ?? 'User';
+    } elseif (isset($_SESSION['temp_id'])) {
+        if (isset($_SESSION['otp_verified']) && $_SESSION['otp_verified'] === true) $initialState['step'] = 5;
+        elseif (isset($_SESSION['current_otp'])) $initialState['step'] = 4;
+        else $initialState['step'] = 3;
+        
+        $initialState['showModal'] = true;
+        $initialState['data']['user_name'] = $_SESSION['temp_name'] ?? 'User';
+    }
+
+    if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
+        $_SESSION['toast_message'] = ['text' => "Account created successfully! You may now log in.", 'type' => 'success'];
+        $initialState['showModal'] = true;
+    }
 } catch (Exception $e) {
     $status = "❌ System Pulse: Offline";
 }
 
-// --- STATE MANAGEMENT (Determine Step based on Session) ---
-if (isset($_SESSION['login_id']) && !isset($_SESSION['user_id'])) {
-    // Existing user found, waiting for password
-    $step = 2;
-} elseif (isset($_SESSION['temp_id'])) {
-    // New user registration flow
-    if (isset($_SESSION['otp_verified']) && $_SESSION['otp_verified'] === true) {
-        $step = 5; // Password Setup
-    } elseif (isset($_SESSION['confirmed_email']) && isset($_SESSION['current_otp'])) {
-        $step = 4; // OTP Check
-    } else {
-        $step = 3; // Email Input
-    }
-}
-
-// Open modal automatically if we are in the middle of a flow
-if ($step > 1) {
-    $showModal = true;
-}
-
-// --- POST REQUEST HANDLER ---
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $showModal = true; // Always keep modal open on POST interactions
-
-    // ACTION: VERIFY IDENTITY (Step 1)
-if (isset($_POST['action_type']) && $_POST['action_type'] === 'verify_identity') {
-        $id_num = trim($_POST['id_number']);
-        // DELETED: $name = trim($_POST['full_name']); 
-
-        // CHANGED: Only pass the ID to the function
-        $record = $dataMgr->verifyIdentity($id_num);
-
-        if ($record) {
-            $existingUser = $dataMgr->checkExistingAccount($record['MasterID']);
-            
-            if ($existingUser) {
-                // EXISTING USER -> GO TO LOGIN
-                $_SESSION['login_id'] = $record['MasterID'];
-                $_SESSION['temp_name'] = $record['Full_Name']; // We still get the name from DB for the UI
-                $step = 2;
-            } else {
-                // NEW USER -> START REGISTRATION
-                $_SESSION['temp_id'] = $record['MasterID']; 
-                $_SESSION['temp_name'] = $record['Full_Name'];
-                $_SESSION['temp_role'] = $record['Role'];
-                $step = 3;
-            }
-        } else {
-            $error = "ID Number not found in school records.";
-            $step = 1;
-        }
-    }
-
-    // ACTION: VERIFY PASSWORD (Step 2 - Login)
-    elseif (isset($_POST['action_type']) && $_POST['action_type'] === 'verify_password') {
-        if (!isset($_SESSION['login_id'])) { header("Location: index.php"); exit(); }
-
-        $pass = $_POST['password'];
-        $user = $dataMgr->checkExistingAccount($_SESSION['login_id']);
-
-        if ($user && password_verify($pass, $user['Password_Hash'])) {
-            $_SESSION['user_id'] = $user['UserID']; 
-            $_SESSION['user_role'] = $user['Role']; 
-            $_SESSION['user_name'] = $user['Full_Name']; 
-            unset($_SESSION['login_id']);
-            unset($_SESSION['temp_name']);
-            header("Location: dashboard/router.php");
-            exit();
-        } else {
-            $error = "Incorrect password. Please try again.";
-            $step = 2;
-        }
-    }
-
-    // ACTION: SUBMIT EMAIL & SEND OTP (Step 3 -> 4)
-    elseif (isset($_POST['action_type']) && $_POST['action_type'] === 'reg_send_otp') {
-        $email = trim($_POST['confirmed_email']);
-        
-        // Generate OTP
-        $otp = rand(100000, 999999);
-        
-        // Send Email logic
-        $sent = false;
-        if (class_exists('EmailSender')) {
-            $mailer = new EmailSender();
-            // Assuming sendOTP returns true on success
-            $sent = $mailer->sendOTP($email, $otp);
-        } else {
-            // Fallback for testing if EmailSender class missing
-            // For production, you might want to hide the OTP from the error message
-            $error = "Email system missing. Contact Admin. (Dev Note: OTP is $otp)";
-            $sent = true; // Force true for dev/testing so you can proceed
-        }
-
-        if ($sent) {
-            $_SESSION['confirmed_email'] = $email;
-            $_SESSION['current_otp'] = $otp;
-            $step = 4;
-            $success_msg = "Verification code sent to $email";
-        } else {
-            $error = "Failed to send email. Please check the address.";
-            $step = 3;
-        }
-    }
-
-    // ACTION: VERIFY OTP (Step 4 -> 5)
-    elseif (isset($_POST['action_type']) && $_POST['action_type'] === 'reg_verify_otp') {
-        $input_otp = $_POST['otp_code'];
-        if ($input_otp == $_SESSION['current_otp']) {
-            $_SESSION['otp_verified'] = true;
-            $step = 5;
-        } else {
-            $error = "Invalid code. Please check your email.";
-            $step = 4;
-        }
-    }
-
-    // ACTION: FINALIZE REGISTRATION (Step 5 -> Success)
-    elseif (isset($_POST['action_type']) && $_POST['action_type'] === 'reg_finalize') {
-        $pass = $_POST['password'];
-        $confirm = $_POST['confirm_password'];
-
-        if ($pass === $confirm) {
-            $success = $dataMgr->finalizeRegistration(
-                $_SESSION['temp_id'], 
-                $_SESSION['confirmed_email'], 
-                $pass, 
-                $_SESSION['temp_role']
-            );
-
-            if ($success) {
-                session_unset();
-                session_destroy();
-                // Redirect to self with success flag
-                header("Location: index.php?registered=true");
-                exit();
-            } else {
-                $error = "Database error. Account might already exist.";
-                $step = 5;
-            }
-        } else {
-            $error = "Passwords do not match.";
-            $step = 5;
-        }
-    }
-}
-
-// Check for registration success flag to show success message
-if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
-    $success_msg = "Account created successfully! You may now log in.";
-    $showModal = true;
-    $step = 1;
-}
+$initialStateJSON = json_encode($initialState);
 ?>
 
 <!DOCTYPE html>
@@ -212,7 +77,13 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
             theme: {
                 extend: {
                     colors: {
-                        crimson: '#dc143c',
+                        crimson: {
+                            50: '#fff1f2',
+                            100: '#ffe4e6',
+                            200: '#fecdd3',
+                            300: '#fda4af',
+                            DEFAULT: '#dc143c',
+                        },
                     }
                 }
             }
@@ -220,6 +91,10 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
     </script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
+    
+    <!-- PWA Manifest & Theme Color -->
+    <link rel="manifest" href="/LabFlow/manifest.json">
+    <meta name="theme-color" content="#dc143c"/>
     <link rel="icon" href="HTML_Demo/img/labflow.jpg">
     <style>
         html { scroll-behavior: smooth; }
@@ -383,7 +258,7 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
         </div>
     </section>
 
-    <section id="how-it-works" class="py-24 px-6 relative overflow-hidden">
+<section id="how-it-works" class="py-24 px-6 relative overflow-hidden">
         <!-- Background decoration -->
         <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[500px] bg-gradient-to-r from-orange-50/50 via-white/0 to-crimson-50/50 -z-10 rounded-full blur-3xl opacity-60"></div>
 
@@ -441,74 +316,74 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
                         <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-8 lg:gap-0 lg:h-[450px]">
                             
                             <div class="relative flex flex-col items-center lg:justify-start lg:h-[50%] lg:self-start group">
-                        <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-orange-100/50 border border-orange-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mb-6 lg:mb-0 max-w-xs mx-auto">
-                            <div class="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mx-auto mb-4 shadow-inner">
+                                <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-orange-100/50 border border-orange-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mb-6 lg:mb-0 max-w-xs mx-auto">
+                                    <div class="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mx-auto mb-4 shadow-inner">
                                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/><path d="M12 8h6"/><path d="M12 13h6"/></svg>
-                            </div>
+                                    </div>
                                     <h3 class="font-bold text-slate-800 mb-2">Class Creation</h3>
                                     <p class="text-xs text-slate-500 leading-relaxed">Teacher creates a class for their respective lab advisory.</p>
-                        </div>
-                        <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-start pt-4">
-                            <div class="w-4 h-4 bg-white rounded-full border-4 border-orange-400 shadow-md relative z-10"></div>
-                            <div class="w-0.5 h-full bg-gradient-to-b from-orange-200 to-transparent border-l border-dashed border-orange-300/50"></div>
-                        </div>
-                    </div>
-
-                    <div class="relative flex flex-col items-center lg:justify-end lg:h-[50%] lg:self-end group">
-                        <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-end pb-4">
-                            <div class="w-0.5 h-full bg-gradient-to-t from-crimson-200 to-transparent border-l border-dashed border-crimson-300/50"></div>
-                            <div class="w-4 h-4 bg-white rounded-full border-4 border-crimson shadow-md relative z-10"></div>
-                        </div>
-                        <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-crimson-100/50 border border-crimson-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mt-6 lg:mt-0 max-w-xs mx-auto">
-                            <div class="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center text-crimson mx-auto mb-4 shadow-inner">                              
-                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                                </div>
+                                <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-start pt-4">
+                                    <div class="w-4 h-4 bg-white rounded-full border-4 border-orange-400 shadow-md relative z-10"></div>
+                                    <div class="w-0.5 h-full bg-gradient-to-b from-orange-200 to-transparent border-l border-dashed border-orange-300/50"></div>
+                                </div>
                             </div>
+
+                            <div class="relative flex flex-col items-center lg:justify-end lg:h-[50%] lg:self-end group">
+                                <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-end pb-4">
+                                    <div class="w-0.5 h-full bg-gradient-to-t from-crimson-200 to-transparent border-l border-dashed border-crimson-300/50"></div>
+                                    <div class="w-4 h-4 bg-white rounded-full border-4 border-crimson shadow-md relative z-10"></div>
+                                </div>
+                                <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-crimson-100/50 border border-crimson-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mt-6 lg:mt-0 max-w-xs mx-auto">
+                                    <div class="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center text-crimson mx-auto mb-4 shadow-inner">                              
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                                    </div>
                                     <h3 class="font-bold text-slate-800 mb-2">Registration</h3>
                                     <p class="text-xs text-slate-500 leading-relaxed">Teacher registers students via MISTO Class List (Individual or CSV).</p>
-                        </div>
-                    </div>
-
-                    <div class="relative flex flex-col items-center lg:justify-start lg:h-[50%] lg:self-start group">
-                        <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-orange-100/50 border border-orange-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mb-6 lg:mb-0 max-w-xs mx-auto">
-                            <div class="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mx-auto mb-4 shadow-inner">
-                                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                </div>
                             </div>
+
+                            <div class="relative flex flex-col items-center lg:justify-start lg:h-[50%] lg:self-start group">
+                                <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-orange-100/50 border border-orange-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mb-6 lg:mb-0 max-w-xs mx-auto">
+                                    <div class="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mx-auto mb-4 shadow-inner">
+                                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                                    </div>
                                     <h3 class="font-bold text-slate-800 mb-2">Student Login</h3>
                                     <p class="text-xs text-slate-500 leading-relaxed">Student clicks login and inputs their Student ID.</p>
-                        </div>
-                        <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-start pt-4">
-                            <div class="w-4 h-4 bg-white rounded-full border-4 border-orange-400 shadow-md relative z-10"></div>
-                            <div class="w-0.5 h-full bg-gradient-to-b from-orange-200 to-transparent border-l border-dashed border-orange-300/50"></div>
-                        </div>
-                    </div>
-
-                    <div class="relative flex flex-col items-center lg:justify-end lg:h-[50%] lg:self-end group">
-                        <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-end pb-4">
-                            <div class="w-0.5 h-full bg-gradient-to-t from-crimson-200 to-transparent border-l border-dashed border-crimson-300/50"></div>
-                            <div class="w-4 h-4 bg-white rounded-full border-4 border-crimson shadow-md relative z-10"></div>
-                        </div>
-                        <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-crimson-100/50 border border-crimson-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mt-6 lg:mt-0 max-w-xs mx-auto">
-                            <div class="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center text-crimson mx-auto mb-4 shadow-inner">
-                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                                </div>
+                                <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-start pt-4">
+                                    <div class="w-4 h-4 bg-white rounded-full border-4 border-orange-400 shadow-md relative z-10"></div>
+                                    <div class="w-0.5 h-full bg-gradient-to-b from-orange-200 to-transparent border-l border-dashed border-orange-300/50"></div>
+                                </div>
                             </div>
+
+                            <div class="relative flex flex-col items-center lg:justify-end lg:h-[50%] lg:self-end group">
+                                <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-end pb-4">
+                                    <div class="w-0.5 h-full bg-gradient-to-t from-crimson-200 to-transparent border-l border-dashed border-crimson-300/50"></div>
+                                    <div class="w-4 h-4 bg-white rounded-full border-4 border-crimson shadow-md relative z-10"></div>
+                                </div>
+                                <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-crimson-100/50 border border-crimson-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mt-6 lg:mt-0 max-w-xs mx-auto">
+                                    <div class="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center text-crimson mx-auto mb-4 shadow-inner">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                                    </div>
                                     <h3 class="font-bold text-slate-800 mb-2">Email Verification</h3>
                                     <p class="text-xs text-slate-500 leading-relaxed">Student inputs WMSU email and verifies via OTP.</p>
-                        </div>
-                    </div>
-
-                    <div class="relative flex flex-col items-center lg:justify-start lg:h-[50%] lg:self-start group">
-                        <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-orange-100/50 border border-orange-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mb-6 lg:mb-0 max-w-xs mx-auto">
-                            <div class="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mx-auto mb-4 shadow-inner">
-                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                </div>
                             </div>
+
+                            <div class="relative flex flex-col items-center lg:justify-start lg:h-[50%] lg:self-start group">
+                                <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-orange-100/50 border border-orange-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mb-6 lg:mb-0 max-w-xs mx-auto">
+                                    <div class="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mx-auto mb-4 shadow-inner">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                    </div>
                                     <h3 class="font-bold text-slate-800 mb-2">Account Secured</h3>
                                     <p class="text-xs text-slate-500 leading-relaxed">Student creates a password and setup is done.</p>
-                        </div>
-                        <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-start pt-4">
-                            <div class="w-4 h-4 bg-white rounded-full border-4 border-orange-400 shadow-md relative z-10"></div>
-                            <div class="w-0.5 h-full bg-gradient-to-b from-orange-200 to-transparent border-l border-dashed border-orange-300/50"></div>
-                        </div>
-                    </div>
+                                </div>
+                                <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-start pt-4">
+                                    <div class="w-4 h-4 bg-white rounded-full border-4 border-orange-400 shadow-md relative z-10"></div>
+                                    <div class="w-0.5 h-full bg-gradient-to-b from-orange-200 to-transparent border-l border-dashed border-orange-300/50"></div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -668,7 +543,6 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
                     </div>
                 </div>
 
-                <!-- Tab 3: Without Activity -->
                 <!-- Tab 4: Without Activity -->
                 <div id="content-no-activity" class="tab-content hidden transition-opacity duration-500">
                     <div class="relative">
@@ -719,6 +593,77 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
                                 <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-start pt-4">
                                     <div class="w-4 h-4 bg-white rounded-full border-4 border-orange-400 shadow-md relative z-10"></div>
                                     <div class="w-0.5 h-full bg-gradient-to-b from-orange-200 to-transparent border-l border-dashed border-orange-300/50"></div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 5: Damage Return Workflow -->
+                <div id="content-damage" class="tab-content hidden transition-opacity duration-500">
+                    <div class="relative">
+                        <!-- Central Line (Desktop) -->
+                        <div class="hidden lg:block absolute top-1/2 left-0 w-full h-1.5 bg-gradient-to-r from-orange-200 via-crimson-200 to-orange-200 -translate-y-1/2 rounded-full z-0 opacity-30"></div>
+
+                        <!-- Vertical Line (Mobile) -->
+                        <div class="lg:hidden absolute left-1/2 top-0 bottom-0 w-1 bg-gradient-to-b from-orange-100 via-crimson-100 to-orange-100 -translate-x-1/2 rounded-full z-0"></div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-0 lg:h-[450px]">
+                            
+                            <div class="relative flex flex-col items-center lg:justify-start lg:h-[50%] lg:self-start group">
+                                <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-orange-100/50 border border-orange-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mb-6 lg:mb-0 max-w-xs mx-auto">
+                                    <div class="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mx-auto mb-4 shadow-inner">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                                    </div>
+                                    <h3 class="font-bold text-slate-800 mb-2">Inspect & Log</h3>
+                                    <p class="text-xs text-slate-500 leading-relaxed">Technician flags item as damaged/lost and captures photo evidence.</p>
+                                </div>
+                                <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-start pt-4">
+                                    <div class="w-4 h-4 bg-white rounded-full border-4 border-orange-400 shadow-md relative z-10"></div>
+                                    <div class="w-0.5 h-full bg-gradient-to-b from-orange-200 to-transparent border-l border-dashed border-orange-300/50"></div>
+                                </div>
+                            </div>
+
+                            <div class="relative flex flex-col items-center lg:justify-end lg:h-[50%] lg:self-end group">
+                                <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-end pb-4">
+                                    <div class="w-0.5 h-full bg-gradient-to-t from-crimson-200 to-transparent border-l border-dashed border-crimson-300/50"></div>
+                                    <div class="w-4 h-4 bg-white rounded-full border-4 border-crimson shadow-md relative z-10"></div>
+                                </div>
+                                <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-crimson-100/50 border border-crimson-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mt-6 lg:mt-0 max-w-xs mx-auto">
+                                    <div class="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center text-crimson mx-auto mb-4 shadow-inner">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                                    </div>
+                                    <h3 class="font-bold text-slate-800 mb-2">Settlement Option</h3>
+                                    <p class="text-xs text-slate-500 leading-relaxed">Student chooses to pay the fee or provide a replacement item.</p>
+                                </div>
+                            </div>
+
+                            <div class="relative flex flex-col items-center lg:justify-start lg:h-[50%] lg:self-start group">
+                                <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-orange-100/50 border border-orange-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mb-6 lg:mb-0 max-w-xs mx-auto">
+                                    <div class="w-14 h-14 bg-orange-50 rounded-2xl flex items-center justify-center text-orange-600 mx-auto mb-4 shadow-inner">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                                    </div>
+                                    <h3 class="font-bold text-slate-800 mb-2">Proof & Receipt</h3>
+                                    <p class="text-xs text-slate-500 leading-relaxed">Technician uploads proof of settlement and issues a transaction receipt.</p>
+                                </div>
+                                <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-start pt-4">
+                                    <div class="w-4 h-4 bg-white rounded-full border-4 border-orange-400 shadow-md relative z-10"></div>
+                                    <div class="w-0.5 h-full bg-gradient-to-b from-orange-200 to-transparent border-l border-dashed border-orange-300/50"></div>
+                                </div>
+                            </div>
+
+                            <div class="relative flex flex-col items-center lg:justify-end lg:h-[50%] lg:self-end group">
+                                <div class="hidden lg:flex flex-col items-center flex-grow w-full justify-end pb-4">
+                                    <div class="w-0.5 h-full bg-gradient-to-t from-crimson-200 to-transparent border-l border-dashed border-crimson-300/50"></div>
+                                    <div class="w-4 h-4 bg-white rounded-full border-4 border-crimson shadow-md relative z-10"></div>
+                                </div>
+                                <div class="bg-white p-6 rounded-[2rem] shadow-lg shadow-crimson-100/50 border border-crimson-50 hover:shadow-xl hover:shadow-crimson/10 transition-all duration-300 hover:-translate-y-2 relative z-10 w-full text-center mt-6 lg:mt-0 max-w-xs mx-auto">
+                                    <div class="w-14 h-14 bg-red-50 rounded-2xl flex items-center justify-center text-crimson mx-auto mb-4 shadow-inner">
+                                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                    </div>
+                                    <h3 class="font-bold text-slate-800 mb-2">Record Cleared</h3>
+                                    <p class="text-xs text-slate-500 leading-relaxed">Student liability is cleared and inventory is reconciled.</p>
                                 </div>
                             </div>
 
@@ -975,132 +920,8 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
             </div>
 
             <div id="login-flow-container">
-                <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-orange-50">
-                    <?php if ($step === 1): ?>
-                        <svg class="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                        </svg>
-                    <?php elseif ($step === 2 || $step === 5): ?>
-                        <svg class="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                        </svg>
-                    <?php elseif ($step === 3): ?>
-                        <svg class="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-                        </svg>
-                    <?php elseif ($step === 4): ?>
-                        <svg class="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.159 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
-                        </svg>
-                    <?php endif; ?>
-                </div>
-
-                <div class="mt-3 text-center sm:mt-5">
-                    <?php if ($step === 1): ?>
-                        <h3 class="text-xl font-display font-bold leading-6 text-slate-900">E-LIMS Gatekeeper</h3>
-                        <p class="mt-2 text-sm text-slate-500">Please verify your identity.</p>
-                    
-                    <?php elseif ($step === 2): ?>
-                        <h3 class="text-xl font-display font-bold leading-6 text-slate-900">Welcome Back</h3>
-                        <p class="mt-2 text-sm text-slate-500">Login as <span class="font-bold text-slate-800"><?php echo htmlspecialchars($_SESSION['temp_name'] ?? 'User'); ?></span></p>
-
-                    <?php elseif ($step === 3): ?>
-                        <h3 class="text-xl font-display font-bold leading-6 text-slate-900">Account Setup</h3>
-                        <p class="mt-2 text-sm text-slate-500">Hello <span class="font-bold text-slate-800"><?php echo htmlspecialchars($_SESSION['temp_name'] ?? 'User'); ?></span>. Please enter your email.</p>
-
-                    <?php elseif ($step === 4): ?>
-                        <h3 class="text-xl font-display font-bold leading-6 text-slate-900">Verify Email</h3>
-                        <p class="mt-2 text-sm text-slate-500">Enter the 6-digit code sent to your email.</p>
-
-                    <?php elseif ($step === 5): ?>
-                        <h3 class="text-xl font-display font-bold leading-6 text-slate-900">Secure Your Account</h3>
-                        <p class="mt-2 text-sm text-slate-500">Create a password to finish setup.</p>
-                    <?php endif; ?>
-                </div>
-
-            <?php if(!empty($error)): ?>
-                <div class="mt-4 rounded-lg bg-red-50 p-4 border border-red-100">
-                    <div class="flex">
-                        <div class="flex-shrink-0"><svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" /></svg></div>
-                        <div class="ml-3"><h3 class="text-sm font-medium text-red-800">Error</h3><div class="mt-1 text-sm text-red-700"><?php echo $error; ?></div></div>
-                    </div>
-                </div>
-            <?php endif; ?>
-            
-            <?php if(!empty($success_msg)): ?>
-                <div class="mt-4 rounded-lg bg-green-50 p-4 border border-green-100">
-                    <div class="flex">
-                        <div class="flex-shrink-0"><svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" /></svg></div>
-                        <div class="ml-3"><h3 class="text-sm font-medium text-green-800">Success</h3><div class="mt-1 text-sm text-green-700"><?php echo $success_msg; ?></div></div>
-                    </div>
-                </div>
-            <?php endif; ?>
-
-            <form action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>" method="POST" class="mt-6 space-y-4">
-                
-                <?php if ($step === 1): ?>
-                    <input type="hidden" name="action_type" value="verify_identity">
-                    <div>
-                        <label for="id_number" class="block text-sm font-bold text-slate-700">ID Number</label>
-                        <input type="text" name="id_number" id="id_number" required class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border placeholder:text-slate-400" placeholder="e.g. 2024-001">
-                    </div>
-                    
-                    <button type="submit" class="w-full rounded-lg bg-crimson px-3 py-3 text-sm font-bold text-white shadow-sm hover:bg-red-700 transition-colors">Verify Identity</button>
-
-                <?php elseif ($step === 2): ?>
-                    <input type="hidden" name="action_type" value="verify_password">
-                    <div>
-                        <div class="flex justify-between items-center">
-                            <label for="password" class="block text-sm font-bold text-slate-700">Password</label>
-                            <button type="button" onclick="toggleModal(false); toggleRecoveryModal(true)" class="text-xs font-semibold text-crimson hover:text-red-700 transition-colors">Forgot Password?</button>
-                        </div>
-                        <input type="password" name="password" id="password" required autofocus class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border placeholder:text-slate-400" placeholder="Enter password">
-                    </div>
-                    <button type="submit" class="w-full rounded-lg bg-crimson px-3 py-3 text-sm font-bold text-white shadow-sm hover:bg-red-700 transition-colors">Access Dashboard</button>
-                    <div class="text-center pt-2"><a href="index.php?action=reset" class="text-xs text-slate-400 hover:text-crimson transition-colors">Not you? Switch account</a></div>
-
-                <?php elseif ($step === 3): ?>
-                    <input type="hidden" name="action_type" value="reg_send_otp">
-                    <div>
-                        <label for="confirmed_email" class="block text-sm font-bold text-slate-700">Email Address</label>
-                        <input type="email" name="confirmed_email" id="confirmed_email" required autofocus class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border placeholder:text-slate-400" placeholder="you@school.edu.ph">
-                    </div>
-                    <button type="submit" class="w-full rounded-lg bg-crimson px-3 py-3 text-sm font-bold text-white shadow-sm hover:bg-red-700 transition-colors">Send Verification Code</button>
-                    <div class="text-center pt-2"><a href="index.php?action=reset" class="text-xs text-slate-400 hover:text-crimson transition-colors">Cancel</a></div>
-
-                <?php elseif ($step === 4): ?>
-                    <input type="hidden" name="action_type" value="reg_verify_otp">
-                    <div>
-                        <label for="otp_code" class="block text-sm font-bold text-slate-700 mb-2">Verification Code</label>
-                        <div class="otp-container flex justify-center gap-2 mb-2">
-                            <!-- Visual inputs for OTP -->
-                            <input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*">
-                            <input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*">
-                            <!-- Actual hidden input for submission -->
-                            <input type="hidden" name="otp_code" id="otp_code">
-                        </div>
-                    </div>
-                    <button type="submit" class="w-full rounded-lg bg-crimson px-3 py-3 text-sm font-bold text-white shadow-sm hover:bg-red-700 transition-colors">Verify OTP</button>
-                    <div class="text-center pt-2"><a href="index.php?action=reset" class="text-xs text-slate-400 hover:text-crimson transition-colors">Cancel</a></div>
-
-                <?php elseif ($step === 5): ?>
-                    <input type="hidden" name="action_type" value="reg_finalize">
-                    <div>
-                        <label for="password" class="block text-sm font-bold text-slate-700">New Password</label>
-                        <input type="password" name="password" id="password" required class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border placeholder:text-slate-400">
-                    </div>
-                    <div>
-                        <label for="confirm_password" class="block text-sm font-bold text-slate-700">Confirm Password</label>
-                        <input type="password" name="confirm_password" id="confirm_password" required class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border placeholder:text-slate-400">
-                    </div>
-                    <button type="submit" class="w-full rounded-lg bg-green-600 px-3 py-3 text-sm font-bold text-white shadow-sm hover:bg-green-700 transition-colors">Finish Registration</button>
-                <?php endif; ?>
-
-            </form>
+                <!-- JS will render content here -->
+            </div>
 
             <div class="mt-6 text-center">
                 <p class="text-[10px] font-mono p-2 bg-slate-50 rounded text-slate-400 border border-slate-100">
@@ -1291,15 +1112,23 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
         </div>
     </div>
 
-    <!-- Toast Notification -->
-    <div id="toast" class="fixed bottom-6 right-6 z-[110] hidden items-center gap-3 bg-slate-900 text-white px-5 py-4 rounded-xl shadow-2xl border border-slate-800 animate__animated animate__fadeInUp">
-        <div class="w-8 h-8 bg-green-500/20 rounded-full flex items-center justify-center text-green-500">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+    <?php
+    $toast_message = null;
+    $toast_type = 'success'; // Default type
+
+    if (isset($_SESSION['toast_message']) && $_SESSION['toast_message'] !== null) {
+        $toast_message = $_SESSION['toast_message']['text'];
+        $toast_type = $_SESSION['toast_message']['type'];
+        unset($_SESSION['toast_message']);
+    }
+    ?>
+
+    <!-- Generic Toast Container -->
+    <div id="toast-container" class="fixed bottom-10 right-10 z-[200] hidden items-center w-full max-w-xs p-4 space-x-4 text-white rounded-2xl shadow-2xl animate-reveal" role="alert">
+        <div id="toast-icon-container" class="inline-flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-xl">
+            <!-- Icon will be inserted by JS -->
         </div>
-        <div>
-            <h4 class="font-bold text-sm">Success</h4>
-            <p class="text-xs text-slate-400" id="toast-message">Action completed successfully.</p>
-        </div>
+        <div id="toast-message" class="text-sm font-bold"></div>
     </div>
 
     <!-- Chat Widget -->
@@ -1307,7 +1136,7 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
         <!-- Chat Window -->
         <div id="chat-window" class="hidden w-80 md:w-96 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-slate-200/60 overflow-hidden flex flex-col transition-all duration-300 origin-bottom-right transform scale-95 opacity-0 ring-1 ring-black/5">
             <!-- Header -->
-            <div class="bg-crimson-gradient p-4 flex justify-between items-center text-white shadow-md relative overflow-hidden">
+            <div class="bg-crimson-gradient p-4 flex justify-between items-center text-white shadow-md relative overflow-hidden z-10">
                 <!-- Decorative circle in header -->
                 <div class="absolute -top-4 -right-4 w-16 h-16 bg-white/10 rounded-full blur-xl"></div>
                 
@@ -1366,6 +1195,9 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
     </div>
 
     <script>
+        let deferredPrompt;
+        let selectedDevice = null;
+        const initialState = <?php echo $initialStateJSON; ?>;
         function switchTab(tabName) {
             const tabs = ['account-setup', 'group', 'individual', 'no-activity', 'damage'];
             const index = tabs.indexOf(tabName);
@@ -1413,10 +1245,10 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
             if (show) {
                 modal.classList.remove('hidden');
                 modal.classList.add('flex');
-                // Setup OTP inputs if we are on step 4
-                <?php if ($step === 4): ?>
-                setTimeout(setupOtpInputs, 100);
-                <?php endif; ?>
+                // If the modal is being opened and it's currently empty, render the initial step.
+                if (!modalContainer.querySelector('form')) {
+                    renderStep(initialState.step, initialState.data);
+                }
             } else {
                 modal.classList.add('hidden');
                 modal.classList.remove('flex');
@@ -1488,22 +1320,176 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
             }
         }
         
-        function showToast(message) {
-            const toast = document.getElementById('toast');
-            const msg = document.getElementById('toast-message');
-            msg.textContent = message;
-            
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast-container');
+            if (!toast) return;
+
+            const iconContainer = document.getElementById('toast-icon-container');
+            const messageContainer = document.getElementById('toast-message');
+
+            // Reset classes
+            toast.className = 'fixed bottom-10 right-10 z-[200] flex items-center w-full max-w-xs p-4 space-x-4 text-white rounded-2xl shadow-2xl animate-reveal';
+            iconContainer.className = 'inline-flex items-center justify-center flex-shrink-0 w-8 h-8 rounded-xl';
+
+            messageContainer.textContent = message;
+
+            if (type === 'success') {
+                toast.classList.add('bg-emerald-600');
+                iconContainer.classList.add('bg-emerald-100');
+                iconContainer.innerHTML = `<svg class="w-5 h-5 text-emerald-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"></path></svg>`;
+            } else { // error
+                toast.classList.add('bg-red-600');
+                iconContainer.classList.add('bg-red-100');
+                iconContainer.innerHTML = `<svg class="w-5 h-5 text-red-600" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>`;
+            }
+
             toast.classList.remove('hidden');
-            toast.classList.remove('animate__fadeOutDown');
-            toast.classList.add('animate__fadeInUp');
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+            toast.style.transition = 'all 0.5s ease';
+
+            setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateY(20px)'; setTimeout(() => { toast.classList.add('hidden'); }, 500); }, 4000);
+        }
+
+        function maskEmail(email) {
+            if (!email || email.indexOf('@') === -1) return 'Invalid Email';
+            const [local, domain] = email.split('@');
+            if (local.length <= 3) return `${local.substring(0, 1)}**@${domain}`;
+            return `${local.substring(0, 3)}***@${domain}`;
+        }
+
+        // --- DYNAMIC MODAL LOGIC ---
+        const modalContainer = document.getElementById('login-flow-container');
+
+        function getStepHtml(step, data = {}) {
+            const userName = data.user_name ? data.user_name.replace(/'/g, "\\'") : 'User';
+            switch(step) {
+                case 1: return `
+                    <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-orange-50"><svg class="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg></div>
+                    <div class="mt-3 text-center sm:mt-5"><h3 class="text-xl font-display font-bold leading-6 text-slate-900">E-LIMS Gatekeeper</h3><p class="mt-2 text-sm text-slate-500">Please verify your identity.</p></div>
+                    <form data-action="verify_identity" class="mt-6 space-y-4">
+                        <input type="hidden" name="action_type" value="verify_identity">
+                        <div><label for="id_number" class="block text-sm font-bold text-slate-700">ID Number</label><input type="text" name="id_number" id="id_number" required class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border placeholder:text-slate-400" placeholder="e.g. 2024-001"></div>
+                        <button type="submit" class="w-full rounded-lg bg-crimson px-3 py-3 text-sm font-bold text-white shadow-sm hover:bg-red-700 transition-colors">Verify Identity</button>
+                    </form>`;
+                case 2: return `
+                    <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-orange-50"><svg class="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg></div>
+                    <div class="mt-3 text-center sm:mt-5"><h3 class="text-xl font-display font-bold leading-6 text-slate-900">Welcome Back</h3><p class="mt-2 text-sm text-slate-500">Login as <span class="font-bold text-slate-800">${userName}</span></p></div>
+                    <form data-action="verify_password" class="mt-6 space-y-4">
+                        <input type="hidden" name="action_type" value="verify_password">
+                        <div><div class="flex justify-between items-center"><label for="password" class="block text-sm font-bold text-slate-700">Password</label><button type="button" onclick="toggleModal(false); toggleRecoveryModal(true)" class="text-xs font-semibold text-crimson hover:text-red-700 transition-colors">Forgot Password?</button></div><input type="password" name="password" id="password" required autofocus class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border placeholder:text-slate-400" placeholder="Enter password"></div>
+                        <button type="submit" class="w-full rounded-lg bg-crimson px-3 py-3 text-sm font-bold text-white shadow-sm hover:bg-red-700 transition-colors">Access Dashboard</button>
+                        <div class="text-center pt-2"><a href="#" onclick="resetFlow(); return false;" class="text-xs text-slate-400 hover:text-crimson transition-colors">Not you? Switch account</a></div>
+                    </form>`;
+                case 3:
+                    const userEmail = data.user_email || '';
+                    const maskedEmail = maskEmail(userEmail);
+                    return `
+                    <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-orange-50"><svg class="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg></div>
+                    <div class="mt-3 text-center sm:mt-5"><h3 class="text-xl font-display font-bold leading-6 text-slate-900">Account Setup</h3><p class="mt-2 text-sm text-slate-500">Hello <span class="font-bold text-slate-800">${userName}</span>. Please confirm your email.</p></div>
+                    <form data-action="reg_send_otp" class="mt-6 space-y-4">
+                        <input type="hidden" name="action_type" value="reg_send_otp">
+                        <div class="text-center p-4 bg-slate-50 rounded-lg border border-slate-200">
+                            <p class="text-sm font-bold text-slate-800">${maskedEmail}</p>
+                            <p class="text-xs text-slate-400 mt-1">A verification code will be sent to this address.</p>
+                        </div>
+                        <button type="submit" class="w-full rounded-lg bg-crimson px-3 py-3 text-sm font-bold text-white shadow-sm hover:bg-red-700 transition-colors">Send Verification Code</button>
+                        <div class="text-center pt-2"><a href="#" onclick="resetFlow(); return false;" class="text-xs text-slate-400 hover:text-crimson transition-colors">Cancel</a></div>
+                    </form>`;
+                case 4: return `
+                    <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-orange-50"><svg class="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.159 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg></div>
+                    <div class="mt-3 text-center sm:mt-5"><h3 class="text-xl font-display font-bold leading-6 text-slate-900">Verify Email</h3><p class="mt-2 text-sm text-slate-500">Enter the 6-digit code sent to your email.</p></div>
+                    <form data-action="reg_verify_otp" class="mt-6 space-y-4">
+                        <input type="hidden" name="action_type" value="reg_verify_otp">
+                        <div><label for="otp_code" class="block text-sm font-bold text-slate-700 mb-2">Verification Code</label><div class="otp-container flex justify-center gap-2 mb-2"><input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*"><input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*"><input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*"><input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*"><input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*"><input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*"><input type="hidden" name="otp_code" id="otp_code"></div></div>
+                        <button type="submit" class="w-full rounded-lg bg-crimson px-3 py-3 text-sm font-bold text-white shadow-sm hover:bg-red-700 transition-colors">Verify OTP</button>
+                        <div class="text-center pt-2"><a href="#" onclick="resetFlow(); return false;" class="text-xs text-slate-400 hover:text-crimson transition-colors">Cancel</a></div>
+                    </form>`;
+                case 5: return `
+                    <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-orange-50"><svg class="h-6 w-6 text-orange-600" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg></div>
+                    <div class="mt-3 text-center sm:mt-5"><h3 class="text-xl font-display font-bold leading-6 text-slate-900">Secure Your Account</h3><p class="mt-2 text-sm text-slate-500">Create a password to finish setup.</p></div>
+                    <form data-action="reg_finalize" class="mt-6 space-y-4">
+                        <input type="hidden" name="action_type" value="reg_finalize">
+                        <div><label for="password" class="block text-sm font-bold text-slate-700">New Password</label><input type="password" name="password" id="password" required class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border placeholder:text-slate-400"></div>
+                        <div><label for="confirm_password" class="block text-sm font-bold text-slate-700">Confirm Password</label><input type="password" name="confirm_password" id="confirm_password" required class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border placeholder:text-slate-400"></div>
+                        <button type="submit" class="w-full rounded-lg bg-green-600 px-3 py-3 text-sm font-bold text-white shadow-sm hover:bg-green-700 transition-colors">Finish Registration</button>
+                    </form>`;
+                default: return 'An error occurred.';
+            }
+        }
+
+        function renderStep(step, data = {}) {
+            if (!modalContainer) return;
+            modalContainer.innerHTML = getStepHtml(step, data);
+            const form = modalContainer.querySelector('form');
+            if (form) {
+                // Directly attach the event listener to the newly created form
+                // to ensure it's always active for the current step.
+                form.addEventListener('submit', handleFormSubmit);
+
+                const firstInput = form.querySelector('input[type="text"], input[type="password"], input[type="email"]');
+                if (firstInput) {
+                    setTimeout(() => firstInput.focus(), 100);
+                }
+            }
+            if (step === 4) {
+                setupOtpInputs();
+            }
+        }
+
+        async function handleFormSubmit(e) {
+            e.preventDefault();
+            const form = e.target;
+            const action = form.dataset.action;
+            if (!action) return;
+
+            const submitButton = form.querySelector('button[type="submit"]');
+            const originalButtonText = submitButton.innerHTML;
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<span class="animate-pulse">Processing...</span>';
+
+            const formData = new FormData(form);
             
-            setTimeout(() => {
-                toast.classList.remove('animate__fadeInUp');
-                toast.classList.add('animate__fadeOutDown');
-                setTimeout(() => {
-                    toast.classList.add('hidden');
-                }, 500);
-            }, 3000);
+            try {
+                const response = await fetch('auth_handler.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    if (result.redirect) {
+                        window.location.href = result.redirect;
+                    } else {
+                        if (result.message) {
+                            showToast(result.message, 'success');
+                        }
+                        renderStep(result.next_step, result.data || {});
+                    }
+                } else {
+                    showToast(result.message || 'An unknown error occurred.', 'error');
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonText;
+                }
+
+            } catch (error) {
+                showToast('Could not connect to the server.', 'error');
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalButtonText;
+            }
+        }
+
+        async function resetFlow() {
+            try {
+                await fetch('auth_handler.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: 'action_type=reset'
+                });
+            } catch (e) {
+                console.error("Failed to reset session on server, but resetting client-side anyway.");
+            }
+            renderStep(1);
         }
 
         // Simple Intersection Observer for scroll animations
@@ -1562,9 +1548,6 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
             });
         }
 
-        // --- PWA INSTALLATION LOGIC ---
-        let selectedDevice = null;
-
         function selectDevice(device) {
             selectedDevice = device;
             
@@ -1591,37 +1574,34 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
             installBtn.textContent = 'Install Now';
         }
 
+        // --- REAL PWA INSTALLATION LOGIC ---
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // Prevent the browser's default install prompt
+            e.preventDefault();
+            // Stash the event so it can be triggered later.
+            deferredPrompt = e;
+            // Log that the event was fired, useful for debugging
+            console.log(`'beforeinstallprompt' event was fired.`);
+            // You could optionally enable the install button here if it's not already visible
+        });
+
         function startInstallation() {
-            const modal = document.getElementById('installModal');
-            const progress = document.getElementById('install-progress');
-            const percentage = document.getElementById('install-percentage');
-            
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-            
-            let width = 0;
-            const interval = setInterval(() => {
-                width += Math.random() * 10;
-                if (width > 100) width = 100;
-                
-                progress.style.width = width + '%';
-                percentage.textContent = Math.floor(width) + '%';
-                
-                if (width === 100) {
-                    clearInterval(interval);
-                    setTimeout(() => {
-                        modal.classList.add('hidden');
-                        modal.classList.remove('flex');
-                        showToast('LabFlow installed successfully!');
-                        // Reset
-                        progress.style.width = '0%';
-                        percentage.textContent = '0%';
-                    }, 800);
+            if (!deferredPrompt) {
+                showToast('Installation is not available on this browser or has already been installed.', 'error');
+                return;
+            }
+            // Show the browser's install prompt
+            deferredPrompt.prompt();
+            // Wait for the user to respond
+            deferredPrompt.userChoice.then((choiceResult) => {
+                if (choiceResult.outcome === 'accepted') {
+                    console.log('User accepted the install prompt');
+                    showToast('LabFlow installed successfully!');
                 }
-            }, 200);
+                deferredPrompt = null; // We can only use it once.
+            });
         }
 
-        // --- CHATBOT LOGIC ---
         function toggleChat() {
             const chatWindow = document.getElementById('chat-window');
             
@@ -1738,9 +1718,28 @@ if (isset($_GET['registered']) && $_GET['registered'] == 'true') {
             if (el) el.remove();
         }
 
+        // --- CHATBOT LOGIC ---
+        // --- SERVICE WORKER REGISTRATION ---
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/LabFlow/sw.js').then(registration => {
+                    console.log('ServiceWorker registration successful with scope: ', registration.scope);
+                }, err => {
+                    console.log('ServiceWorker registration failed: ', err);
+                });
+            });
+        }
+
+
         // Open modal if PHP state dictates
         <?php if ($showModal): ?>
             toggleModal(true);
+        <?php endif; ?>
+
+        <?php if ($toast_message): ?>
+        document.addEventListener('DOMContentLoaded', function() {
+            showToast('<?php echo addslashes($toast_message); ?>', '<?php echo $toast_type; ?>');
+        });
         <?php endif; ?>
     </script>
 </body>
