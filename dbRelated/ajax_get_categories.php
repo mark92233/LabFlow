@@ -4,7 +4,7 @@ require_once __DIR__ . '/operation.php';
 header('Content-Type: application/json');
 
 // Access Control: Only Admins can access this.
-if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'Admin') {
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'Admin') {
     http_response_code(403);
     echo json_encode(['error' => 'Unauthorized']);
     exit();

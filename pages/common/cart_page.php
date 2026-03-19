@@ -107,7 +107,7 @@ $page_title = "Requisition Cart";
                             </template>
                         </div>
 
-                        <form method="POST" action="../../dbRelated/submit_requisition.php" class="mt-12">
+                        <form method="POST" action="../../includes/submit_requisition.php" class="mt-12">
                             <input type="hidden" name="cart_data" :value="JSON.stringify(cart)">
                             <div class="text-left mb-8">
                                 <label for="reason" class="text-sm font-bold text-gray-700">Purpose of Requisition (Optional)</label>

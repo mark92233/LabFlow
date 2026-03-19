@@ -2,8 +2,23 @@
 require_once __DIR__ . '/db_connect.php';
 
 if (!class_exists('DataManager')) {
+/**
+ * Custom Exception for cases requiring user confirmation.
+ */
+class ConfirmationRequiredException extends Exception {
+    protected $data;
+    public function __construct($message = "", $data = [], $code = 0, Throwable $previous = null) {
+        parent::__construct($message, $code, $previous);
+        $this->data = $data;
+    }
+    public function getData() {
+        return $this->data;
+    }
+}
+
 class DataManager {
     public $db;
+    private $lastError = null;
 
     public function __construct() {
         try {
@@ -13,6 +28,25 @@ class DataManager {
         } catch (PDOException $e) {
             // Catch the specific PDOException from db_connect and re-throw it to be handled by the AJAX script.
             throw new Exception("Database Initialization Failed: " . $e->getMessage());
+        }
+    }
+
+    public function getLastError(): ?string {
+        return $this->lastError;
+    }
+
+    public function getUserProfileData($userId) {
+        try {
+            $query = "SELECT u.UserID, u.MasterID, u.Confirmed_Email, m.Full_Name, m.ID_Number, m.Role
+                      FROM users u
+                      JOIN lookup_masterlist m ON u.MasterID = m.MasterID
+                      WHERE u.UserID = :uid LIMIT 1";
+            $stmt = $this->db->prepare($query);
+            $stmt->execute([':uid' => $userId]);
+            return $stmt->fetch(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("getUserProfileData Error: " . $e->getMessage());
+            return null;
         }
     }
 
@@ -72,6 +106,14 @@ class DataManager {
             error_log("Registration Error: " . $e->getMessage());
             return false;
         }
+    }
+
+    // Update a user's password using their MasterID
+    public function updatePasswordByMasterId($masterId, $newPassword) {
+        $hashedPassword = password_hash($newPassword, PASSWORD_DEFAULT);
+        $sql = "UPDATE users SET Password_Hash = :password WHERE MasterID = :master_id";
+        $stmt = $this->db->prepare($sql);
+        return $stmt->execute(['password' => $hashedPassword, 'master_id' => $masterId]);
     }
 
     // Fetch all classes a specific student is currently enrolled in
@@ -150,7 +192,10 @@ class DataManager {
 
     // Add a new item to the inventory
     public function addItem($catId, $name, $desc, $isConsumable, $isScalable, $qty = 0, $location = null, $unit = null) {
-        $query = "INSERT INTO inventory (CategoryID, Item_Name, Description, is_consumable, is_scalable, Total_Qty, Available_Qty, Location, Unit) 
+        // Sanitize location: if it's an empty string, it must be NULL for the foreign key.
+        $shelfLocation = empty($location) ? null : $location;
+
+        $query = "INSERT INTO inventory (CategoryID, Item_Name, Description, is_consumable, is_scalable, Total_Qty, Available_Qty, shelf_id, Unit) 
                   VALUES (:cid, :name, :desc, :consumable, :scalable, :tqty, :aqty, :loc, :unit)";
         $stmt = $this->db->prepare($query);
         $stmt->execute([
@@ -161,7 +206,7 @@ class DataManager {
             'scalable' => $isScalable,
             'tqty' => $qty,
             'aqty' => $qty, 
-            'loc' => $location,
+            'loc' => $shelfLocation,
             'unit' => $unit
         ]);
         return $this->db->lastInsertId();
@@ -226,10 +271,13 @@ class DataManager {
                 return false;
             }
 
+            // Sanitize location: if it's an empty string, it must be NULL for the foreign key.
+            $shelfLocation = empty($location) ? null : $location;
+
             // 4. Prepare and execute the UPDATE statement
-            $query = "UPDATE inventory SET Item_Name = :name, Description = :desc, Location = :loc, Total_Qty = :tqty, Available_Qty = :aqty WHERE ItemID = :id";
+            $query = "UPDATE inventory SET Item_Name = :name, Description = :desc, shelf_id = :loc, Total_Qty = :tqty, Available_Qty = :aqty WHERE ItemID = :id";
             $updateStmt = $this->db->prepare($query);
-            $updateStmt->execute([':name' => $itemName, ':desc' => $description, ':loc' => $location, ':tqty' => $totalQty, ':aqty' => $newAvailableQty, ':id' => $itemId]);
+            $updateStmt->execute([':name' => $itemName, ':desc' => $description, ':loc' => $shelfLocation, ':tqty' => $totalQty, ':aqty' => $newAvailableQty, ':id' => $itemId]);
 
             $this->db->commit();
             return $updateStmt->rowCount() > 0;
@@ -975,16 +1023,18 @@ class DataManager {
 
     public function getPaginatedInventory($options = []) {
         $limit = $options['limit'] ?? 12;
-        $page = $options['page'] ?? 1;
+        $page = (int)($options['page'] ?? 1);
         $offset = ($page - 1) * $limit;
         $search = $options['search'] ?? '';
         $category = $options['category'] ?? 'all';
+        $assetType = $options['asset_type'] ?? 'all';
     
+        $joinSql = "FROM inventory i LEFT JOIN shelves s ON i.shelf_id = s.id";
         $whereClauses = [];
         $params = [];
     
         if (!empty($search)) {
-            $whereClauses[] = "i.Item_Name LIKE :search";
+            $whereClauses[] = "(i.Item_Name LIKE :search OR s.shelf_name LIKE :search)";
             $params[':search'] = "%$search%";
         }
     
@@ -992,17 +1042,27 @@ class DataManager {
             $whereClauses[] = "i.CategoryID = :category";
             $params[':category'] = $category;
         }
+
+        if ($assetType === 'consumable') {
+            $whereClauses[] = "i.is_consumable = 1";
+        } elseif ($assetType === 'non-consumable') {
+            $whereClauses[] = "i.is_consumable = 0";
+        }
     
         $whereSql = count($whereClauses) > 0 ? 'WHERE ' . implode(' AND ', $whereClauses) : '';
     
         // Query for total count
-        $countSql = "SELECT COUNT(i.ItemID) FROM inventory i $whereSql";
+        $countSql = "SELECT COUNT(i.ItemID) $joinSql $whereSql";
         $countStmt = $this->db->prepare($countSql);
         $countStmt->execute($params);
         $totalRecords = (int) $countStmt->fetchColumn();
     
         // Query for data
-        $dataSql = "SELECT i.ItemID, i.Item_Name, i.CategoryID FROM inventory i $whereSql ORDER BY i.Item_Name ASC LIMIT :limit OFFSET :offset";
+        $dataSql = "SELECT i.ItemID, i.Item_Name, i.CategoryID, i.is_consumable, s.shelf_name as shelf_id 
+                    $joinSql 
+                    $whereSql 
+                    ORDER BY i.Item_Name ASC 
+                    LIMIT :limit OFFSET :offset";
         $dataStmt = $this->db->prepare($dataSql);
         
         foreach ($params as $key => $val) { $dataStmt->bindValue($key, $val); }
@@ -1012,6 +1072,45 @@ class DataManager {
         $items = $dataStmt->fetchAll(PDO::FETCH_ASSOC);
     
         return ['items' => $items, 'total' => $totalRecords, 'pages' => ceil($totalRecords / $limit), 'currentPage' => $page];
+    }
+
+    /**
+     * Assigns an inventory item to a specific shelf by updating its shelf_id.
+     * We assume shelf_id in the inventory table stores the shelf_name.
+     * @param int $itemId The ID of the item to assign.
+     * @param string $shelfName The name of the shelf to assign it to.
+     * @return bool True on success, false on failure.
+     */
+    public function assignItemToShelf($itemId, $shelfName) {
+        try {
+            // First, check that the shelf name exists in the shelves table for data integrity.
+            // Normalize all whitespace to single spaces, then trim, for robust lookup.
+            $cleanedShelfName = preg_replace('/\s+/u', ' ', trim($shelfName));
+            
+            // Fetch the integer ID of the shelf, not just its name.
+            $idStmt = $this->db->prepare("SELECT id FROM shelves WHERE shelf_name = :shelfName");
+            $idStmt->execute([':shelfName' => $cleanedShelfName]);
+            $shelfId = $idStmt->fetchColumn();
+
+            if (!$shelfId) {
+                 $allShelvesStmt = $this->db->prepare("SELECT shelf_name FROM shelves ORDER BY shelf_name ASC");
+                $allShelvesStmt->execute();
+                $existingShelfNames = $allShelvesStmt->fetchAll(PDO::FETCH_COLUMN);
+                
+                $this->lastError = "Assignment failed. The selected shelf '{$cleanedShelfName}' does not exist. "
+                                 . "Existing shelves: [" . implode(', ', $existingShelfNames) . "]";
+                return false;
+            }
+
+            // Now, update the inventory table with the correct integer ID.
+            $sql = "UPDATE inventory SET shelf_id = :shelfId WHERE ItemID = :itemId";
+            $stmt = $this->db->prepare($sql);
+            return $stmt->execute([':shelfId' => $shelfId, ':itemId' => $itemId]);
+        } catch (PDOException $e) {
+            $this->lastError = "Database error during assignment.";
+            error_log("assignItemToShelf Error: " . $e->getMessage());
+            return false;
+        }
     }
 
     // Get details of a specific item
@@ -1233,13 +1332,6 @@ public function getSessionForActivity($studentID, $activityID) {
     } catch (PDOException $e) {
         return false;
     }
-}
-
-// Inside DataManager class
-private $lastError = null;
-
-public function getLastError() {
-    return $this->lastError;
 }
 
 /**
@@ -1612,29 +1704,33 @@ public function processCleanReturn($session_id) {
 
     // Check if a student has any unresolved liabilities (damages)
     public function checkLiability($student_id) {
-        // Returns an array with status (bool) and details (array of items)
-        
-        $stmt = $this->conn->prepare("
-            SELECT dr.*, i.Item_Name, bs.SessionID, bs.Date_Returned
-            FROM damaged_returns dr
-            JOIN inventory i ON dr.item_id = i.ItemID
-            JOIN borrowing_sessions bs ON dr.session_id = bs.SessionID
-            WHERE dr.student_id = ? AND dr.status = 'Unresolved'
-        ");
-        
-        $stmt->bind_param("i", $student_id);
-        $stmt->execute();
-        $result = $stmt->get_result();
-        
-        $liabilities = [];
-        while ($row = $result->fetch_assoc()) {
-            $liabilities[] = $row;
+        if (!$this->db) { return ['has_liability' => false, 'items' => []]; }
+
+        try {
+            $sql = "SELECT 
+                        dr.*, 
+                        i.Item_Name, 
+                        bs.SessionID, 
+                        bs.CreatedAt as SlipDate
+                    FROM damaged_returns dr
+                    JOIN inventory i ON dr.item_id = i.ItemID
+                    JOIN borrowing_sessions bs ON dr.session_id = bs.SessionID
+                    LEFT JOIN inventory i ON dr.item_id = i.ItemID
+                    LEFT JOIN borrowing_sessions bs ON dr.session_id = bs.SessionID
+                    WHERE dr.student_id = ? AND dr.status IN ('Unresolved', 'Under Review')";
+            
+            $stmt = $this->db->prepare($sql);
+            $stmt->execute([$student_id]);
+            $liabilities = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            return [
+                'has_liability' => count($liabilities) > 0,
+                'items' => $liabilities
+            ];
+        } catch (PDOException $e) {
+            error_log("checkLiability Error: " . $e->getMessage());
+            return ['has_liability' => false, 'items' => []];
         }
-        
-        return [
-            'has_liability' => count($liabilities) > 0,
-            'items' => $liabilities
-        ];
     }
 
 // Inside class DataManager
@@ -1662,6 +1758,56 @@ public function getEnrolledStudents($class_id) {
         } catch (PDOException $e) {
             return [];
         }
+    }
+
+    // Get all students enrolled in a class with pagination and search
+    public function getPaginatedEnrolledStudents($class_id, $options = []) {
+        if (!$this->db) { return ['data' => [], 'total' => 0, 'pages' => 1, 'currentPage' => 1]; }
+
+        $limit = $options['limit'] ?? 10;
+        $page = $options['page'] ?? 1;
+        $offset = ($page - 1) * $limit;
+        $search = $options['search'] ?? '';
+
+        $params = [':cid' => $class_id];
+        $whereClauses = "ce.ClassID = :cid";
+
+        if (!empty($search)) {
+            $whereClauses .= " AND (m.Full_Name LIKE :search OR m.ID_Number LIKE :search)";
+            $params[':search'] = "%$search%";
+        }
+
+        // Query for total count
+        $countSql = "SELECT COUNT(ce.EnrollmentID) 
+                     FROM class_enrollment ce
+                     JOIN lookup_masterlist m ON ce.MasterID = m.MasterID
+                     WHERE $whereClauses";
+        $countStmt = $this->db->prepare($countSql);
+        $countStmt->execute($params);
+        $totalRecords = (int) $countStmt->fetchColumn();
+
+        // Query for data
+        $dataSql = "SELECT 
+                        ce.EnrollmentID, 
+                        ce.ClearanceStatus, 
+                        m.MasterID,
+                        m.Full_Name, 
+                        m.ID_Number,
+                        m.Official_Email,
+                        m.is_verified AS Is_Verified
+                    FROM class_enrollment ce
+                    JOIN lookup_masterlist m ON ce.MasterID = m.MasterID
+                    WHERE $whereClauses
+                    ORDER BY m.Full_Name ASC
+                    LIMIT :limit OFFSET :offset";
+        $dataStmt = $this->db->prepare($dataSql);
+        foreach ($params as $key => &$val) { $dataStmt->bindValue($key, $val); }
+        $dataStmt->bindValue(':limit', $limit, PDO::PARAM_INT);
+        $dataStmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+        $dataStmt->execute();
+        $students = $dataStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        return ['data' => $students, 'total' => $totalRecords, 'pages' => ceil($totalRecords / $limit), 'currentPage' => $page];
     }
 
     // Get all users who are not students (for admin management)
@@ -2641,6 +2787,218 @@ public function previewSmartGroups($classIdArray, $limit) {
         $stmt = $this->db->prepare($sql);
         $stmt->execute([$activityID, $groupID, $myMasterID]);
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
+    }
+
+    // --- SPATIAL INVENTORY (SHELVES) ---
+    public function getShelves() {
+        try {
+            $query = "SELECT * FROM shelves ORDER BY created_at ASC";
+            $stmt = $this->db->prepare($query);
+            $stmt->execute();
+            return $stmt->fetchAll(PDO::FETCH_ASSOC);
+        } catch (PDOException $e) {
+            error_log("Get Shelves Error: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Gets a list of items for a given list of shelf names.
+     * @param array $shelfNames
+     * @return array An associative array of shelf_name => [item_names]
+     */
+    public function getItemsOnShelves(array $shelfNames): array
+    {
+        if (empty($shelfNames)) {
+            return [];
+        }
+        $placeholders = rtrim(str_repeat('?,', count($shelfNames)), ',');
+        $sql = "SELECT s.shelf_name, i.Item_Name 
+                FROM inventory i 
+                JOIN shelves s ON i.shelf_id = s.id 
+                WHERE s.shelf_name IN ($placeholders)";
+        
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute($shelfNames);
+        $results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+        $groupedResults = [];
+        foreach ($results as $row) {
+            $groupedResults[$row['shelf_name']][] = $row['Item_Name'];
+        }
+        return $groupedResults;
+    }
+
+    /**
+     * Sets the shelf_id to NULL for all items on the given shelves.
+     * @param array $shelfNames
+     * @return bool True on success
+     */
+    public function unassignItemsFromShelves(array $shelfNames): bool
+    {
+        if (empty($shelfNames)) {
+            return true; // Nothing to do
+        }
+        try {
+            $placeholders = rtrim(str_repeat('?,', count($shelfNames)), ',');
+            $updateSql = "UPDATE inventory SET shelf_id = NULL WHERE shelf_id IN (SELECT id FROM shelves WHERE shelf_name IN ($placeholders))";
+            $updateStmt = $this->db->prepare($updateSql);
+            return $updateStmt->execute($shelfNames);
+        } catch (PDOException $e) {
+            error_log("unassignItemsFromShelves Error: " . $e->getMessage());
+            $this->lastError = "Database error while unassigning items.";
+            return false;
+        }
+    }
+
+    public function saveShelves(array $shelves, bool $force = false): false|int
+    {
+        try {
+            $this->db->beginTransaction();
+
+            // 1. Get all shelf names from the submitted payload
+            $submittedShelfNames = array_column($shelves, 'shelf_name');
+            if (empty($submittedShelfNames)) {
+                $submittedShelfNames = ['']; // Prevents NOT IN () SQL error if all shelves are deleted
+            }
+
+            // 2. Delete shelves that are no longer in the layout, but only if they are empty.
+            $placeholders = rtrim(str_repeat('?,', count($submittedShelfNames)), ',');
+            $getDeletedShelvesSQL = "SELECT id, shelf_name FROM shelves WHERE shelf_name NOT IN ($placeholders)";
+            $deletedShelvesStmt = $this->db->prepare($getDeletedShelvesSQL);
+            $deletedShelvesStmt->execute($submittedShelfNames);
+            $shelvesToDelete = $deletedShelvesStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            if (!empty($shelvesToDelete)) {
+                $shelfIdsToDelete = array_column($shelvesToDelete, 'id');
+
+                // Check if these shelves have items on them
+                $placeholdersForIds = rtrim(str_repeat('?,', count($shelfIdsToDelete)), ',');
+                $getItemsSQL = "SELECT i.Item_Name, s.shelf_name FROM inventory i JOIN shelves s ON i.shelf_id = s.id WHERE i.shelf_id IN ($placeholdersForIds)";
+                $itemsStmt = $this->db->prepare($getItemsSQL);
+                $itemsStmt->execute($shelfIdsToDelete);
+                $itemsOnShelves = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+                if (!empty($itemsOnShelves) && !$force) {
+                    // If items exist and we are NOT forcing deletion, throw exception with data for the modal
+                    $dataForConfirmation = [];
+                    foreach ($itemsOnShelves as $item) {
+                        $dataForConfirmation[$item['shelf_name']][] = $item['Item_Name'];
+                    }
+                    throw new ConfirmationRequiredException('Shelves contain items.', $dataForConfirmation);
+                }
+
+                // If forcing deletion, first set the items' shelf_id to NULL
+                if ($force && !empty($itemsOnShelves)) {
+                    $updateInvStmt = $this->db->prepare("UPDATE inventory SET shelf_id = NULL WHERE shelf_id IN ($placeholdersForIds)");
+                    $updateInvStmt->execute($shelfIdsToDelete);
+                }
+
+                // Now, it's safe to delete the shelves
+                $deleteStmt = $this->db->prepare("DELETE FROM shelves WHERE id IN ($placeholdersForIds)");
+                $deleteStmt->execute($shelfIdsToDelete);
+            }
+
+            // 3. Upsert (Update or Insert) the shelves from the payload.
+            // This relies on a UNIQUE constraint on the `shelf_name` column.
+            $upsertStmt = $this->db->prepare(
+                "INSERT INTO shelves (shelf_name, pos_x, pos_y, width, height, rotation)
+                 VALUES (:name, :px, :py, :w, :h, :r)
+                 ON DUPLICATE KEY UPDATE
+                    pos_x = VALUES(pos_x),
+                    pos_y = VALUES(pos_y),
+                    width = VALUES(width),
+                    height = VALUES(height),
+                    rotation = VALUES(rotation)"
+            );
+
+            foreach ($shelves as $shelf) {
+                if (!isset($shelf['shelf_name'], $shelf['pos_x'], $shelf['pos_y'], $shelf['width'], $shelf['height'], $shelf['rotation'])) {
+                    continue; // Skip invalid shelf data
+                }
+                $shelf['shelf_name'] = preg_replace('/\s+/u', ' ', trim($shelf['shelf_name'])); // Normalize whitespace before saving
+                $upsertStmt->execute([
+                    ':name' => $shelf['shelf_name'],
+                    ':px'   => $shelf['pos_x'],
+                    ':py'   => $shelf['pos_y'],
+                    ':w'    => $shelf['width'],
+                    ':h'    => $shelf['height'],
+                    ':r'    => $shelf['rotation'] ?? 0
+                ]);
+            }
+
+            $this->db->commit();
+            return count($shelves);
+        } catch (Exception $e) {
+            if ($this->db->inTransaction()) {
+                $this->db->rollBack();
+            }
+            if (str_contains($e->getMessage(), 'Unknown column')) {
+                $this->lastError = "Database Schema Mismatch. Please ensure the 'shelves' table has a 'rotation' column.";
+            } elseif (str_contains($e->getMessage(), 'Duplicate entry')) {
+                $this->lastError = "Database Error: Shelf names must be unique. Please ensure a UNIQUE constraint is on the 'shelf_name' column.";
+            } else {
+                $this->lastError = "Database Error: " . $e->getMessage();
+            }
+        }
+    }
+
+    public function getUserProfilePageData($userID) {
+        if (!$this->db) { return []; }
+
+        $profileData = [
+            'identity' => [],
+            'accountability' => [],
+            'history' => [],
+            'stockroom_zone' => [],
+        ];
+
+        try {
+            // 1. Identity
+            $identitySql = "SELECT 
+                                m.MasterID, m.Full_Name, m.ID_Number, m.Role,
+                                c.Class_Name, c.Section
+                            FROM users u
+                            JOIN lookup_masterlist m ON u.MasterID = m.MasterID
+                            LEFT JOIN class_enrollment ce ON m.MasterID = ce.MasterID
+                            LEFT JOIN classes c ON ce.ClassID = c.ClassID
+                            WHERE u.UserID = ?
+                            LIMIT 1";
+            $stmt = $this->db->prepare($identitySql);
+            $stmt->execute([$userID]);
+            $identityData = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+            
+            if (!empty($identityData)) {
+                $identityData['SectionName'] = ($identityData['Class_Name'] && $identityData['Section']) 
+                    ? $identityData['Class_Name'] . ' - ' . $identityData['Section'] 
+                    : 'Not Enrolled';
+                unset($identityData['Class_Name'], $identityData['Section']);
+            }
+            $profileData['identity'] = $identityData;
+
+            if (!empty($profileData['identity'])) {
+                // 2. Accountability
+                $issuedSql = "SELECT SUM(bi.Quantity) 
+                              FROM borrowed_items bi
+                              JOIN borrowing_sessions bs ON bi.SessionID = bs.SessionID
+                              WHERE bs.StudentID = ? AND bs.Status = 'Issued'";
+                $stmt = $this->db->prepare($issuedSql);
+                $stmt->execute([$userID]);
+                $profileData['accountability']['IssuedItemsCount'] = (int)$stmt->fetchColumn();
+                $profileData['accountability']['SubmittedReportsCount'] = 0; // This feature is not currently implemented
+
+                // 3. History
+                $fullHistory = $this->getStudentHistoryWithDetails($userID);
+                $profileData['history'] = array_slice($fullHistory, 0, 5);
+
+                // 4. Stockroom Zone (Placeholder)
+                $profileData['stockroom_zone'] = ['shelf_id' => 'CHEM-A1', 'aisle' => 'Chemistry Wing, Aisle 1'];
+            }
+            return $profileData;
+        } catch (PDOException $e) {
+            error_log("getUserProfilePageData Error: " . $e->getMessage());
+            return [];
+        }
     }
 }
 }

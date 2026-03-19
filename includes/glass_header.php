@@ -26,6 +26,7 @@ $page_map = [
 
     // Common
     $base_url . 'pages/common/inventory_hub.php' => ['label' => 'Inventory', 'parent' => $base_url . 'dashboard/router.php'],
+    $base_url . 'HTML_Demo/stock_room.php' => ['label' => 'Stock Room Layout', 'parent' => $base_url . 'pages/common/inventory_hub.php'],
     $base_url . 'pages/common/cart_page.php' => ['label' => 'My Cart', 'parent' => $base_url . 'pages/common/inventory_hub.php'],
 
     // Admin
@@ -145,13 +146,13 @@ if (empty($breadcrumbs)) {
             </span>
         </a>
 
-        <div class="flex items-center gap-3 pl-6 border-l-2 border-gray-100">
+        <a href="/LabFlow/pages/common/profile.php" title="View Profile" class="flex items-center gap-3 pl-6 border-l-2 border-gray-100 cursor-pointer">
             <div class="text-right hidden sm:block">
                 <p class="text-xs font-bold text-gray-800"><?= $_SESSION['user_name'] ?></p>
                 <p class="text-[10px] text-gray-500 uppercase"><?= $_SESSION['user_role'] ?></p>
             </div>
             <img src="https://ui-avatars.com/api/?name=<?= urlencode($_SESSION['user_name']) ?>&background=f97316&color=fff" 
                  class="w-10 h-10 rounded-2xl border-2 border-orange-500 shadow-md shadow-orange-500/20" alt="">
-        </div>
+        </a>
     </div>
 </header>

@@ -1,4 +1,4 @@
-</main> </div> </div> 
+
 <script>
      /**
      * Reveal Animation Logic

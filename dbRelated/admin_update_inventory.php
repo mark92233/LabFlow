@@ -2,8 +2,8 @@
 session_start();
 require_once __DIR__ . '/operation.php';
 
-// Access Control: Only Admins can manipulate stock directly
-if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'Admin') {
+// Access Control: Only Admins can manipulate stock directly.
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'Admin') {
     echo json_encode(['success' => false, 'error' => 'Unauthorized access']);
     exit();
 }

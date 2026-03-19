@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Profile | LabFlow</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background: #0f172a; color: #f1f5f9; font-family: 'Inter', sans-serif; }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 1rem;
+        }
+        .status-pill { background: rgba(56, 189, 248, 0.1); border: 1px solid rgba(56, 189, 248, 0.2); }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto">
+        <div class="flex items-center justify-between mb-8">
+            <h1 class="text-2xl font-bold text-white">Lab<span class="text-sky-400">Flow</span> Profile</h1>
+            <div class="flex items-center space-x-4">
+                <div class="text-right hidden md:block">
+                    <p class="text-xs text-slate-400">System Time</p>
+                    <p class="text-sm font-mono text-sky-400">Mar 18, 2026</p>
+                </div>
+                <div class="w-10 h-10 rounded-lg glass-card flex items-center justify-center border-sky-500/30">
+                    <i class="fas fa-user-shield text-sky-400"></i>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <div class="lg:col-span-4 space-y-6">
+                <div class="glass-card p-6 border-sky-500/20">
+                    <div class="mb-6">
+                        <h2 class="text-sm font-bold text-slate-500 uppercase tracking-widest mb-4">Official Identity</h2>
+                        <h3 class="text-2xl font-bold text-white">Mark John Ando</h3>
+                        <p class="text-sky-400 font-mono text-sm">ACT-2024-0012</p>
+                    </div>
+
+                    <div class="space-y-4 text-sm">
+                        <div class="flex justify-between items-center py-2 border-b border-white/5">
+                            <span class="text-slate-400">System Role:</span>
+                            <span class="px-2 py-0.5 status-pill text-[10px] font-bold text-sky-400 rounded uppercase">Student</span>
+                        </div>
+                        <div class="flex justify-between items-center py-2 border-b border-white/5">
+                            <span class="text-slate-400">Masterlist ID:</span>
+                            <span class="text-slate-200">#44</span> </div>
+                        <div class="pt-2">
+                            <span class="text-slate-400 block mb-1">Affiliated Section:</span>
+                            <span class="text-slate-200 font-medium">ACT - 2A</span> </div>
+                    </div>
+                </div>
+
+                <div class="glass-card p-6 bg-emerald-500/5 border-emerald-500/10">
+                    <h2 class="text-xs font-bold text-emerald-500 uppercase mb-3 flex items-center">
+                        <i class="fas fa-map-marker-alt mr-2"></i> Primary Stockroom Zone
+                    </h2>
+                    <p class="text-sm text-slate-300">Your assigned pickup location for laboratory apparatus:</p>
+                    <div class="mt-4 p-3 bg-black/20 rounded-lg border border-white/5">
+                        <p class="text-white font-bold text-sm">Shelf ID: #101</p>
+                        <p class="text-xs text-slate-500 italic uppercase">Main Glassware Aisle</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="lg:col-span-8 space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <div class="glass-card p-6 group hover:border-sky-500/30 transition">
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="text-xs font-bold text-slate-400 uppercase">Active Accountability</h3>
+                            <i class="fas fa-microscope text-sky-500/50"></i>
+                        </div>
+                        <div class="flex items-baseline space-x-2">
+                            <span class="text-4xl font-black text-white">0</span>
+                            <span class="text-slate-500 text-xs uppercase">Items Held</span>
+                        </div>
+                        <p class="text-[10px] text-slate-500 mt-2">Status: <span class="text-emerald-400">Clear</span> (No unreturned items in borrow_details)</p>
+                    </div>
+
+                    <div class="glass-card p-6">
+                        <div class="flex justify-between items-start mb-4">
+                            <h3 class="text-xs font-bold text-slate-400 uppercase">Academic Reports</h3>
+                            <i class="fas fa-file-invoice text-sky-500/50"></i>
+                        </div>
+                        <div class="flex items-baseline space-x-2">
+                            <span class="text-4xl font-black text-white">12</span>
+                            <span class="text-slate-500 text-xs uppercase">Submitted</span>
+                        </div>
+                        <div class="w-full bg-white/5 h-1 rounded-full mt-4 overflow-hidden">
+                            <div class="bg-sky-500 h-full w-[100%]"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="glass-card p-6">
+                    <h2 class="text-sm font-bold text-slate-400 uppercase tracking-wider mb-6 flex items-center">
+                        <i class="fas fa-history mr-3 text-sky-500"></i> Recent Lab Activity
+                    </h2>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-sm">
+                            <thead class="text-slate-500 text-xs border-b border-white/5 uppercase">
+                                <tr>
+                                    <th class="pb-3 px-2">Slip ID</th>
+                                    <th class="pb-3 px-2">Group Name</th>
+                                    <th class="pb-3 px-2">Return Status</th>
+                                    <th class="pb-3 px-2">Date</th>
+                                </tr>
+                            </thead>
+                            <tbody class="text-slate-300">
+                                <tr class="border-b border-white/5 hover:bg-white/5">
+                                    <td class="py-4 px-2 font-mono">SLIP-8821</td>
+                                    <td class="py-4 px-2">Group 5 - Chem Lab</td>
+                                    <td class="py-4 px-2"><span class="text-emerald-400">Returned</span></td>
+                                    <td class="py-4 px-2 text-slate-500">2026-03-15</td>
+                                </tr>
+                                <tr class="border-b border-white/5 hover:bg-white/5">
+                                    <td class="py-4 px-2 font-mono">SLIP-8790</td>
+                                    <td class="py-4 px-2">Bio Project Team</td>
+                                    <td class="py-4 px-2"><span class="text-emerald-400">Returned</span></td>
+                                    <td class="py-4 px-2 text-slate-500">2026-03-10</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <footer class="mt-12 text-center">
+            <p class="text-[10px] text-slate-600 uppercase tracking-[0.2em]">LabFlow SNHS | Relational Inventory Core v1.3</p>
+        </footer>
+    </div>
+
+</body>
+</html>

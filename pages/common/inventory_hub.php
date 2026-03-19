@@ -70,7 +70,9 @@ $page_title = ($role === 'Student') ? "Apparatus Shop" : "Inventory Hub";
             showFilters: false,
             assetType: 'all',
             selectedCategory: 'all',
-            items: inventoryData,
+
+            allItems: inventoryData,
+
             allCategories: categoryData,
             currentPage: 1,
             itemsPerPage: 12,
@@ -81,6 +83,8 @@ $page_title = ($role === 'Student') ? "Apparatus Shop" : "Inventory Hub";
             aiSearchResults: [],
             aiMode: false,
             aiQuery: '',
+            aiThinkingText: '',
+            aiThinkingInterval: null,
 
             selectedItem: null,
             isEditing: false,
@@ -153,17 +157,15 @@ $page_title = ($role === 'Student') ? "Apparatus Shop" : "Inventory Hub";
                 const isConsumable = this.assetType === 'consumable' ? 1 : 0;
                 return this.allCategories.filter(cat => cat.is_consumable == isConsumable);
             },
-
             get filteredItems() {
-                if (!Array.isArray(this.items)) return [];
+                if (!Array.isArray(this.allItems)) return [];
 
-                // The logic is now simpler. It just filters based on the standard controls.
-                // The AI search will manipulate the `search` property to filter the grid.
-                return this.items.filter(item => {
-                    const categoryMatch = (this.selectedCategory === 'all' || this.selectedCategory == item.CategoryID);
-                    const searchMatch = (this.search === '' || item.Item_Name.toLowerCase().includes(this.search.toLowerCase()));
+                // Reverted to a single, comprehensive filter to ensure reactivity is straightforward.
+                return this.allItems.filter(item => {
                     const assetMatch = (this.assetType === 'all' || (item.Asset_Type && item.Asset_Type.toLowerCase() === this.assetType));
-                    return categoryMatch && searchMatch && assetMatch;
+                    const categoryMatch = (this.selectedCategory === 'all' || item.CategoryID == this.selectedCategory);
+                    const searchMatch = (this.search === '' || item.Item_Name.toLowerCase().includes(this.search.toLowerCase()));
+                    return assetMatch && categoryMatch && searchMatch;
                 });
             },
 
@@ -176,8 +178,8 @@ $page_title = ($role === 'Student') ? "Apparatus Shop" : "Inventory Hub";
                 const variantId = variant ? variant.VariantID : null;
                 const itemName = item.Item_Name;
                 const maxQty = variant ? variant.Variant_Available_Qty : item.Available_Qty;
-                const size = variant ? variant.Size_Value : null; // Size is only for variants
-                const unit = variant ? variant.Unit : (item.is_consumable == 1 ? item.Unit : null); // Unit for variants or consumables
+                const size = variant ? variant.Size_Value : null;
+                const unit = variant ? variant.Unit : item.Unit;
 
                 const existingItem = cart.find(i => i.itemId === itemId && i.variantId === variantId);
 
@@ -210,6 +212,26 @@ $page_title = ($role === 'Student') ? "Apparatus Shop" : "Inventory Hub";
                 this.aiQuery = this.search;
                 this.aiSearchResults = [];
 
+                // Start typewriter for "Thinking..."
+                this.aiThinkingText = '';
+                const thinkingMessage = 'Thinking...';
+                let i = 0;
+                if (this.aiThinkingInterval) clearInterval(this.aiThinkingInterval); // Clear any previous interval
+                this.aiThinkingInterval = setInterval(() => {
+                    if (i < thinkingMessage.length) {
+                        this.aiThinkingText += thinkingMessage.charAt(i);
+                        i++;
+                    } else {
+                        // Loop the dots for a continuous "thinking" feel
+                        if (this.aiThinkingText.endsWith('...')) {
+                            this.aiThinkingText = 'Thinking';
+                            i = 'Thinking'.length;
+                        } else {
+                            this.aiThinkingText += '.';
+                        }
+                    }
+                }, 200);
+
                 try {
                     const response = await fetch('../../dbRelated/ai_inventory_search.php', {
                         method: 'POST',
@@ -222,18 +244,33 @@ $page_title = ($role === 'Student') ? "Apparatus Shop" : "Inventory Hub";
                     const results = await response.json();
                     if (results.error) { throw new Error(results.error); }
 
-                    this.aiSearchResults = results;
+                    // Stop the "Thinking..." animation and display results sequentially
+                    clearInterval(this.aiThinkingInterval);
+                    this.isAiSearching = false;
                     this.search = ''; // Clear search bar to show all items in the grid below
+
+                    if (Array.isArray(results) && results.length > 0) {
+                        const displayResultsSequentially = (index = 0) => {
+                            if (index < results.length) {
+                                this.aiSearchResults.push(results[index]);
+                                setTimeout(() => displayResultsSequentially(index + 1), 150);
+                            }
+                        };
+                        displayResultsSequentially();
+                    } else {
+                        this.aiSearchResults = [];
+                    }
                 } catch (error) {
+                    clearInterval(this.aiThinkingInterval);
+                    this.isAiSearching = false;
                     console.error('AI Search Error:', error);
                     showToast('AI search failed. ' + error.message, 'error');
                     this.aiSearchResults = [];
-                } finally {
-                    this.isAiSearching = false;
                 }
             },
 
             clearAiSearch() {
+                if (this.aiThinkingInterval) clearInterval(this.aiThinkingInterval);
                 this.aiMode = false;
                 this.aiSearchResults = [];
                 this.aiQuery = '';
@@ -264,9 +301,21 @@ $page_title = ($role === 'Student') ? "Apparatus Shop" : "Inventory Hub";
                   )'
                   x-init="init()">
                 <div class="flex-1">
-                    <header class="mb-12">
-                        <h2 class="text-3xl font-bold text-gray-800"><?= $page_title ?></h2>
-                        <p class="text-sm text-gray-500 mt-1">Browse and manage laboratory apparatus and equipment.</p>
+                    <header class="mb-12 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+                        <div>
+                            <h2 class="text-3xl font-bold text-gray-800"><?= $page_title ?></h2>
+                            <p class="text-sm text-gray-500 mt-1">Browse and manage laboratory apparatus and equipment.</p>
+                        </div>
+
+                        <div class="flex items-center gap-3">
+                            <?php if (in_array($role, ['Teacher', 'Admin'])): ?>
+                                <a href="/LabFlow/HTML_Demo/stock_room.php"
+                                    class="bg-orange-500 text-white px-6 py-3 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-orange-600 transition-all shadow-lg shadow-orange-500/20 flex items-center gap-2">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z"></path></svg>
+                                    <span>Enter Stock Room</span>
+                                </a>
+                            <?php endif; ?>
+                        </div>
                     </header>
 
                     <div class="mb-8 space-y-4">
@@ -348,14 +397,18 @@ $page_title = ($role === 'Student') ? "Apparatus Shop" : "Inventory Hub";
                             <button @click="clearAiSearch()" class="text-xs font-bold text-orange-500 hover:text-red-500 transition-colors">Close</button>
                         </div>
 
-                        <div x-show="isAiSearching" class="text-center py-2"><p class="text-orange-600 font-bold animate-pulse">Thinking...</p></div>
+                        <div x-show="isAiSearching" class="text-center py-2">
+                            <p class="text-orange-600 font-bold" x-text="aiThinkingText"></p>
+                        </div>
 
                         <div x-show="!isAiSearching">
                             <p class="text-xs text-orange-700" x-show="aiSearchResults.length > 0 && Array.isArray(aiSearchResults)">Found <strong x-text="aiSearchResults.length"></strong> potential matches for: "<span class="italic font-bold" x-text="aiQuery"></span>"</p>
                             <p class="text-xs text-orange-700" x-show="!Array.isArray(aiSearchResults) || aiSearchResults.length === 0">No items matched your description.</p>
                             <div class="mt-4 space-y-2 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
                                 <template x-for="result in aiSearchResults" :key="result.item_name">
-                                    <a href="#" @click.prevent="searchForItem(result.item_name)" class="block p-3 rounded-lg hover:bg-orange-50 transition-colors group">
+                                    <a href="#" @click.prevent="searchForItem(result.item_name)" 
+                                       class="block p-3 rounded-lg hover:bg-orange-50 transition-colors group"
+                                       x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0 transform -translate-x-2" x-transition:enter-end="opacity-100 transform translate-x-0">
                                         <h4 class="font-bold text-sm text-slate-800 group-hover:text-orange-600" x-text="result.item_name"></h4>
                                         <p class="text-xs text-slate-500 italic mt-1" x-text="result.reason"></p>
                                     </a>
@@ -366,13 +419,13 @@ $page_title = ($role === 'Student') ? "Apparatus Shop" : "Inventory Hub";
 
                     <!-- Inventory Grid -->
                     <div class="shop-grid">
-                        <template x-if="items.length === 0">
+                        <template x-if="allItems.length === 0">
                             <div class="col-span-full bg-white rounded-2xl p-12 text-center border-2 border-dashed border-gray-200">
                                 <p class="font-bold text-gray-600">No inventory items found.</p>
                                 <p class="text-sm text-gray-400 mt-2">You can add items from the 'Register Apparatus' page if you are an Admin.</p>
                             </div>
                         </template>
-                        <template x-if="items.length > 0">
+                        <template x-if="allItems.length > 0">
                             <template x-for="item in paginatedItems" :key="item.ItemID">
                                 <div @click="isEditing = false; selectedItem = item"
                                      draggable="true"
@@ -402,7 +455,7 @@ $page_title = ($role === 'Student') ? "Apparatus Shop" : "Inventory Hub";
                                         <div>
                                             <p class="text-2xl font-black text-orange-500">
                                                 <span x-text="item.Available_Qty"></span>
-                                                <span x-show="item.is_consumable == 1 && item.Unit" class="text-lg align-baseline" x-text="item.Unit"></span>
+                                            <span x-show="item.Unit" class="text-lg align-baseline" x-text="item.Unit"></span>
                                             </p>
                                             <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Available</p>
                                         </div>
@@ -410,7 +463,7 @@ $page_title = ($role === 'Student') ? "Apparatus Shop" : "Inventory Hub";
                                         <div>
                                             <p class="text-2xl font-black text-gray-600">
                                                 <span x-text="item.Total_Qty"></span>
-                                                <span x-show="item.is_consumable == 1 && item.Unit" class="text-lg align-baseline" x-text="item.Unit"></span>
+                                            <span x-show="item.Unit" class="text-lg align-baseline" x-text="item.Unit"></span>
                                             </p>
                                             <p class="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total</p>
                                         </div>
@@ -421,7 +474,7 @@ $page_title = ($role === 'Student') ? "Apparatus Shop" : "Inventory Hub";
                     </div>
                     
                     <!-- Empty state for filters -->
-                    <div x-show="items.length > 0 && filteredItems.length === 0" class="col-span-full bg-white rounded-2xl p-12 text-center border-2 border-dashed border-gray-200 mt-8"
+                    <div x-show="allItems.length > 0 && filteredItems.length === 0" class="col-span-full bg-white rounded-2xl p-12 text-center border-2 border-dashed border-gray-200 mt-8"
                          x-transition x-cloak>
                          <p class="font-bold text-gray-600">No items match your filter.</p>
                          <p class="text-sm text-gray-400 mt-2">Try selecting a different category or clearing your search.</p>
@@ -433,6 +486,7 @@ $page_title = ($role === 'Student') ? "Apparatus Shop" : "Inventory Hub";
                             <label for="itemsPerPage" class="text-xs font-bold text-gray-500">Show:</label>
                             <select x-model.number="itemsPerPage" @change="currentPage = 1" id="itemsPerPage" class="bg-gray-50 border-gray-200 rounded-md text-xs font-bold p-1 focus:ring-orange-500 focus:border-orange-500">
                                 <option value="12">12</option>
+                                <option value="16">16</option>
                                 <option value="24">24</option>
                                 <option value="36">36</option>
                                 <option value="48">48</option>

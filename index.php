@@ -1071,17 +1071,7 @@ $initialStateJSON = json_encode($initialState);
             </div>
 
             <div id="recovery-flow-container">
-                <!-- Dynamic Content -->
-                <div class="text-center py-6">
-                    <div class="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-orange-100 mb-6 animate__animated animate__bounceIn">
-                        <svg class="h-10 w-10 text-orange-600" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                        </svg>
-                    </div>
-                    <h3 class="text-2xl font-bold text-slate-900 mb-2">Coming Soon</h3>
-                    <p class="text-slate-500 mb-8 text-sm">Account recovery will be implemented in a future update.</p>
-                    <button type="button" onclick="toggleRecoveryModal(false)" class="w-full rounded-lg bg-slate-900 px-4 py-3 text-sm font-bold text-white hover:bg-slate-800 transition-colors shadow-lg shadow-slate-200">Close</button>
-                </div>
+                <!-- JS will render recovery steps here -->
             </div>
         </div>
     </div>
@@ -1314,9 +1304,184 @@ $initialStateJSON = json_encode($initialState);
             if (show) {
                 modal.classList.remove('hidden');
                 modal.classList.add('flex');
+                renderRecoveryStep(1); // Render the first step of recovery when opening
             } else {
                 modal.classList.add('hidden');
                 modal.classList.remove('flex');
+                resetFlow(); // Also reset the main login flow to step 1 when closing recovery
+            }
+        }
+
+        function toggleRecoveryModal(show) {
+            const modal = document.getElementById('recoveryModal');
+            if (show) {
+                modal.classList.remove('hidden');
+                modal.classList.add('flex');
+                renderRecoveryStep(1); // Render the first step of recovery when opening
+            } else {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+                resetFlow(); // Also reset the main login flow to step 1 when closing recovery
+            }
+        }
+
+        const recoveryModalContainer = document.getElementById('recovery-flow-container');
+
+        function getRecoveryStepHtml(step, data = {}) {
+            const userEmail = data.user_email || '';
+            const maskedEmail = maskEmail(userEmail);
+
+            switch(step) {
+                case 1: // Find Account
+                    return `
+                        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-crimson/10 mb-4">
+                            <svg class="h-6 w-6 text-crimson" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 013 3m3 0a6 6 0 01-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1121.75 8.25z" /></svg>
+                        </div>
+                        <div class="text-center mb-6"><h3 class="text-xl font-bold text-slate-900">Account Recovery</h3><p class="text-sm text-slate-500">Enter your ID number to find your account.</p></div>
+                        <form data-action="recovery_identity" class="space-y-4">
+                            <input type="hidden" name="action_type" value="recovery_identity">
+                            <div><label class="block text-sm font-bold text-slate-700">ID Number</label><input type="text" name="id_number" required class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-crimson focus:ring-crimson sm:text-sm p-2.5 border" placeholder="e.g. 2024-001"></div>
+                            <button type="submit" class="w-full rounded-lg bg-crimson px-3 py-3 text-sm font-bold text-white hover:bg-red-700 transition-colors">Find Account</button>
+                        </form>`;
+                case 2: // Send OTP
+                    return `
+                        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-crimson/10 mb-4"><svg class="h-6 w-6 text-crimson" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" /></svg></div>
+                        <div class="text-center mb-6"><h3 class="text-xl font-bold text-slate-900">Confirm Email</h3><p class="text-sm text-slate-500">Is this your registered email? A recovery code will be sent here.</p></div>
+                        <form data-action="recovery_send_otp" class="space-y-4">
+                            <input type="hidden" name="action_type" value="recovery_send_otp">
+                            <div class="text-center p-4 bg-slate-50 rounded-lg border border-slate-200">
+                                <p class="text-sm font-bold text-slate-800">${maskedEmail}</p>
+                            </div>
+                            <button type="submit" class="w-full rounded-lg bg-crimson px-3 py-3 text-sm font-bold text-white hover:bg-red-700 transition-colors">Send Recovery Code</button>
+                        </form>`;
+                case 3: // Verify OTP
+                    return `
+                        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-crimson/10 mb-4"><svg class="h-6 w-6 text-crimson" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.159 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" /></svg></div>
+                        <div class="text-center mb-6"><h3 class="text-xl font-bold text-slate-900">Check Your Email</h3><p class="text-sm text-slate-500">Enter the 6-digit code we sent.</p></div>
+                        <form data-action="recovery_verify_otp" class="space-y-4">
+                            <input type="hidden" name="action_type" value="recovery_verify_otp">
+                            <div><label class="block text-sm font-bold text-slate-700 mb-2">Recovery Code</label><div class="otp-container flex justify-center gap-2 mb-2"><input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*"><input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*"><input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*"><input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*"><input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*"><input type="text" maxlength="1" class="w-10 h-12 text-center text-xl font-bold border border-slate-300 rounded-lg focus:border-crimson focus:ring-1 focus:ring-crimson outline-none transition-all" inputmode="numeric" pattern="[0-9]*"><input type="hidden" name="otp_code" id="otp_code"></div></div>
+                            <button type="submit" class="w-full rounded-lg bg-crimson px-3 py-3 text-sm font-bold text-white hover:bg-red-700 transition-colors">Verify Code</button>
+                        </form>`;
+                case 4: // Reset Password
+                    return `
+                        <div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-crimson/10 mb-4"><svg class="h-6 w-6 text-crimson" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg></div>
+                        <div class="text-center mb-6"><h3 class="text-xl font-bold text-slate-900">Reset Password</h3><p class="text-sm text-slate-500">Create a new secure password.</p></div>
+                        <form data-action="recovery_reset_password" class="space-y-4">
+                            <input type="hidden" name="action_type" value="recovery_reset_password">
+                            <div><label class="block text-sm font-bold text-slate-700">New Password</label><input type="password" name="password" required class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-crimson focus:ring-crimson sm:text-sm p-2.5 border"></div>
+                            <div><label class="block text-sm font-bold text-slate-700">Confirm Password</label><input type="password" name="confirm_password" required class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-crimson focus:ring-crimson sm:text-sm p-2.5 border"></div>
+                            <button type="submit" class="w-full rounded-lg bg-green-600 px-3 py-3 text-sm font-bold text-white hover:bg-green-700 transition-colors">Update Password</button>
+                        </form>`;
+                default: return 'An error occurred during recovery.';
+            }
+        }
+
+        function renderRecoveryStep(step, data = {}) {
+            if (!recoveryModalContainer) return;
+            recoveryModalContainer.innerHTML = getRecoveryStepHtml(step, data);
+            const form = recoveryModalContainer.querySelector('form');
+            if (form) {
+                form.addEventListener('submit', handleRecoverySubmit);
+                const firstInput = form.querySelector('input[type="text"], input[type="password"]');
+                if (firstInput) {
+                    setTimeout(() => firstInput.focus(), 100);
+                }
+            }
+            if (step === 3) { // OTP step
+                setupOtpInputs(recoveryModalContainer.querySelector('.otp-container'));
+            }
+        }
+
+        async function handleRecoverySubmit(e) {
+            e.preventDefault();
+            const form = e.target;
+            const submitButton = form.querySelector('button[type="submit"]');
+            const originalButtonText = submitButton.innerHTML;
+            submitButton.disabled = true;
+            submitButton.innerHTML = '<span class="animate-pulse">Processing...</span>';
+
+            const formData = new FormData(form);
+            
+            try {
+                const response = await fetch('auth_handler.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    if (result.message) showToast(result.message, 'success');
+                    
+                    if (result.next_step === 1) { // If success leads back to login
+                        toggleRecoveryModal(false); // Close recovery modal
+                        resetFlow(); // Reset main login flow to show ID input
+                        toggleModal(true); // Show main login modal
+                    } else {
+                        renderRecoveryStep(result.next_step, result.data || {});
+                    }
+                } else {
+                    showToast(result.message || 'An unknown error occurred.', 'error');
+                    submitButton.disabled = false;
+                    submitButton.innerHTML = originalButtonText;
+                }
+            } catch (error) {
+                showToast('Could not connect to the server.', 'error');
+                submitButton.disabled = false;
+                submitButton.innerHTML = originalButtonText;
+            }
+        }
+
+        async function startForgotPasswordFlow() {
+            // 1. Close the current login modal
+            toggleModal(false);
+
+            // 2. Show a temporary loading state in the recovery modal
+            const recoveryModal = document.getElementById('recoveryModal');
+            const recoveryContainer = document.getElementById('recovery-flow-container');
+            recoveryModal.classList.remove('hidden');
+            recoveryModal.classList.add('flex');
+            recoveryContainer.innerHTML = '<div class="text-center p-10"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-crimson mx-auto"></div><p class="mt-4 text-sm text-slate-500 font-medium">Finding your account...</p></div>';
+
+            // 3. Fetch the user's email from the backend
+            try {
+                const formData = new FormData();
+                formData.append('action_type', 'get_recovery_email');
+
+                const response = await fetch('auth_handler.php', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    // 4. Render the "Confirm Email" step
+                    renderRecoveryStep(result.next_step, result.data);
+                } else {
+                    // Handle error - show step 1 as a fallback if session expired
+                    showToast(result.message || 'Could not initiate recovery. Please try again.', 'error');
+                    renderRecoveryStep(1);
+                }
+            } catch (error) {
+                showToast('Could not connect to the server.', 'error');
+                // Fallback to the original flow
+                renderRecoveryStep(1);
+            }
+        }
+
+        function togglePasswordVisibility(button) {
+            const input = button.previousElementSibling;
+            const eyeOpen = button.querySelector('.eye-open');
+            const eyeClosed = button.querySelector('.eye-closed');
+
+            if (input.type === 'password') {
+                input.type = 'text';
+                eyeOpen.classList.add('hidden');
+                eyeClosed.classList.remove('hidden');
+            } else {
+                input.type = 'password';
+                eyeOpen.classList.remove('hidden');
+                eyeClosed.classList.add('hidden');
             }
         }
         
@@ -1351,13 +1516,6 @@ $initialStateJSON = json_encode($initialState);
             setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateY(20px)'; setTimeout(() => { toast.classList.add('hidden'); }, 500); }, 4000);
         }
 
-        function maskEmail(email) {
-            if (!email || email.indexOf('@') === -1) return 'Invalid Email';
-            const [local, domain] = email.split('@');
-            if (local.length <= 3) return `${local.substring(0, 1)}**@${domain}`;
-            return `${local.substring(0, 3)}***@${domain}`;
-        }
-
         // --- DYNAMIC MODAL LOGIC ---
         const modalContainer = document.getElementById('login-flow-container');
 
@@ -1377,7 +1535,16 @@ $initialStateJSON = json_encode($initialState);
                     <div class="mt-3 text-center sm:mt-5"><h3 class="text-xl font-display font-bold leading-6 text-slate-900">Welcome Back</h3><p class="mt-2 text-sm text-slate-500">Login as <span class="font-bold text-slate-800">${userName}</span></p></div>
                     <form data-action="verify_password" class="mt-6 space-y-4">
                         <input type="hidden" name="action_type" value="verify_password">
-                        <div><div class="flex justify-between items-center"><label for="password" class="block text-sm font-bold text-slate-700">Password</label><button type="button" onclick="toggleModal(false); toggleRecoveryModal(true)" class="text-xs font-semibold text-crimson hover:text-red-700 transition-colors">Forgot Password?</button></div><input type="password" name="password" id="password" required autofocus class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border placeholder:text-slate-400" placeholder="Enter password"></div>
+                        <div>
+                            <div class="flex justify-between items-center"><label for="password" class="block text-sm font-bold text-slate-700">Password</label>                        <button type="button" onclick="startForgotPasswordFlow()" class="font-semibold text-crimson hover:text-red-700">Forgot Password?</button></div>
+                            <div class="relative mt-1">
+                                <input type="password" name="password" id="password" required autofocus class="block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border placeholder:text-slate-400 pr-10" placeholder="Enter password">
+                                <button type="button" onclick="togglePasswordVisibility(this)" class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600">
+                                    <svg class="h-5 w-5 eye-open" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                    <svg class="h-5 w-5 eye-closed hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 .95-3.11 3.543-5.45 6.83-6.21M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12c-1.274 4.057-5.064 7-9.542 7a10.05 10.05 0 01-1.875-.225M3 3l18 18" /></svg>
+                                </button>
+                            </div>
+                        </div>
                         <button type="submit" class="w-full rounded-lg bg-crimson px-3 py-3 text-sm font-bold text-white shadow-sm hover:bg-red-700 transition-colors">Access Dashboard</button>
                         <div class="text-center pt-2"><a href="#" onclick="resetFlow(); return false;" class="text-xs text-slate-400 hover:text-crimson transition-colors">Not you? Switch account</a></div>
                     </form>`;
@@ -1410,8 +1577,26 @@ $initialStateJSON = json_encode($initialState);
                     <div class="mt-3 text-center sm:mt-5"><h3 class="text-xl font-display font-bold leading-6 text-slate-900">Secure Your Account</h3><p class="mt-2 text-sm text-slate-500">Create a password to finish setup.</p></div>
                     <form data-action="reg_finalize" class="mt-6 space-y-4">
                         <input type="hidden" name="action_type" value="reg_finalize">
-                        <div><label for="password" class="block text-sm font-bold text-slate-700">New Password</label><input type="password" name="password" id="password" required class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border placeholder:text-slate-400"></div>
-                        <div><label for="confirm_password" class="block text-sm font-bold text-slate-700">Confirm Password</label><input type="password" name="confirm_password" id="confirm_password" required class="mt-1 block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border placeholder:text-slate-400"></div>
+                        <div>
+                            <label for="password" class="block text-sm font-bold text-slate-700">New Password</label>
+                            <div class="relative mt-1">
+                                <input type="password" name="password" id="password" required class="block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border pr-10">
+                                <button type="button" onclick="togglePasswordVisibility(this)" class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600">
+                                    <svg class="h-5 w-5 eye-open" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                    <svg class="h-5 w-5 eye-closed hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 .95-3.11 3.543-5.45 6.83-6.21M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12c-1.274 4.057-5.064 7-9.542 7a10.05 10.05 0 01-1.875-.225M3 3l18 18" /></svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div>
+                            <label for="confirm_password" class="block text-sm font-bold text-slate-700">Confirm Password</label>
+                            <div class="relative mt-1">
+                                <input type="password" name="confirm_password" id="confirm_password" required class="block w-full rounded-lg border-slate-300 shadow-sm focus:border-orange-600 focus:ring-orange-600 sm:text-sm p-2.5 border pr-10">
+                                <button type="button" onclick="togglePasswordVisibility(this)" class="absolute inset-y-0 right-0 flex items-center pr-3 text-slate-400 hover:text-slate-600">
+                                    <svg class="h-5 w-5 eye-open" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                    <svg class="h-5 w-5 eye-closed hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.542-7 .95-3.11 3.543-5.45 6.83-6.21M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12c-1.274 4.057-5.064 7-9.542 7a10.05 10.05 0 01-1.875-.225M3 3l18 18" /></svg>
+                                </button>
+                            </div>
+                        </div>
                         <button type="submit" class="w-full rounded-lg bg-green-600 px-3 py-3 text-sm font-bold text-white shadow-sm hover:bg-green-700 transition-colors">Finish Registration</button>
                     </form>`;
                 default: return 'An error occurred.';
@@ -1433,7 +1618,7 @@ $initialStateJSON = json_encode($initialState);
                 }
             }
             if (step === 4) {
-                setupOtpInputs();
+                setupOtpInputs(modalContainer.querySelector('.otp-container'));
             }
         }
 
@@ -1492,6 +1677,14 @@ $initialStateJSON = json_encode($initialState);
             renderStep(1);
         }
 
+        function maskEmail(email) {
+            if (!email) return '';
+            const [name, domain] = email.split('@');
+            if (!domain) return email; // Not a valid email format
+            const maskedName = name.length > 2 ? name.substring(0, 2) + '*'.repeat(name.length - 2) : name;
+            return maskedName + '@' + domain;
+        }
+
         // Simple Intersection Observer for scroll animations
         const observerOptions = { threshold: 0.1 };
         const observer = new IntersectionObserver((entries) => {
@@ -1505,19 +1698,18 @@ $initialStateJSON = json_encode($initialState);
 
         document.querySelectorAll('.hover-lift').forEach(el => observer.observe(el));
 
-        function setupOtpInputs() {
-            const containers = document.querySelectorAll('.otp-container');
-            containers.forEach(container => {
-                const inputs = container.querySelectorAll('input[type="text"]');
-                const hiddenInput = container.querySelector('input[type="hidden"]');
-                
-                const updateHidden = () => {
-                    let val = '';
-                    inputs.forEach(i => val += i.value);
-                    hiddenInput.value = val;
-                };
+        function setupOtpInputs(container) {
+            if (!container) return;
+            const inputs = container.querySelectorAll('input[type="text"]');
+            const hiddenInput = container.querySelector('input[type="hidden"]');
+            
+            const updateHidden = () => {
+                let val = '';
+                inputs.forEach(i => val += i.value);
+                hiddenInput.value = val;
+            };
 
-                inputs.forEach((input, index) => {
+            inputs.forEach((input, index) => {
                     input.oninput = (e) => {
                         input.value = input.value.replace(/[^0-9]/g, '');
                         if (input.value.length > 0 && index < inputs.length - 1) {
@@ -1544,7 +1736,6 @@ $initialStateJSON = json_encode($initialState);
                             inputs[focusIndex].focus();
                         }
                     };
-                });
             });
         }
 

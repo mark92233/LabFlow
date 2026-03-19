@@ -12,14 +12,6 @@ if (!file_exists('operation.php')) {
 }
 require_once __DIR__ . '/operation.php';
 echo "<span style='color:green'>✅ operation.php loaded.</span><br>";
-__DIR__ . '/operation.php';
-echo "<span style='color:green'>✅ operation.php loaded.</span><br>";
-__DIR__ . '/operation.php';
-echo "<span style='color:green'>✅ operation.php loaded.</span><br>";
-
-// 2. CHECK CLASS INSTANTIATION
-echo "<h3>2. Testing DataManager Class...</h3>";
-if (!class_exists('DataManager')) {
     die("<span style='color:red'>❌ Class 'DataManager' not found. Check class name in operation.php</span>");
 }
 

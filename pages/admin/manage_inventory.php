@@ -165,6 +165,35 @@ $page_title = "Item Registration";
                             itemNameInput.focus();
                             return;
                         }
+                    } else if (this.step === 2) {
+                        if (this.itemType === 'consumable' && (!this.itemQty || this.itemQty <= 0)) {
+                            showToast('Please enter a valid quantity for the consumable item.', 'error');
+                            this.$root.querySelector('#consumable_qty').focus();
+                            return;
+                        }
+                        if (this.itemType === 'non-consumable' && !this.isScalable && (!this.itemQty || this.itemQty <= 0)) {
+                            showToast('Please enter a valid quantity for the non-scalable item.', 'error');
+                            this.$root.querySelector('#non_scalable_qty').focus();
+                            return;
+                        }
+                        if (this.itemType === 'non-consumable' && this.isScalable) {
+                            if (this.itemVariants.length === 0) {
+                                showToast('Please add at least one variant for scalable items.', 'error');
+                                return;
+                            }
+                            let totalVariantQty = 0;
+                            for (const variant of this.itemVariants) {
+                                if (!variant.size.trim() || !variant.unit.trim() || !variant.qty || variant.qty <= 0) {
+                                    showToast('Please ensure all variant fields (size, unit, quantity) are filled and quantity is greater than 0.', 'error');
+                                    return;
+                                }
+                                totalVariantQty += parseInt(variant.qty);
+                            }
+                            if (totalVariantQty <= 0) {
+                                showToast('Total quantity across all variants must be greater than 0.', 'error');
+                                return;
+                            }
+                        }
                     }
                     if (this.step < 3) this.step++;
                 },
