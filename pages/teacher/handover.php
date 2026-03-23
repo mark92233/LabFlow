@@ -2,8 +2,8 @@
 session_start();
 require_once '../../dbRelated/operation.php';
 
-// 1. Access Control - Admin Only
-if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'Admin') {
+// 1. Access Control - Admin, Teacher, or LabTech
+if (!isset($_SESSION['user_id']) || !in_array($_SESSION['user_role'], ['Admin', 'Teacher', 'LabTech'])) {
     header("Location: ../../index.php");
     exit();
 }
@@ -18,25 +18,63 @@ $success = "";
 if (isset($_GET['action']) && isset($_GET['sid'])) {
     $sid = $_GET['sid'];
     $action = $_GET['action'];
-    $newStatus = '';
+    $handlerId = $_SESSION['user_id'];
 
-    if ($action === 'approve') $newStatus = 'Approved';
-    if ($action === 'reject') $newStatus = 'Rejected';
+    // Preserve other filters from the URL for a seamless redirect
+    $redirect_params = $_GET;
+    unset($redirect_params['action'], $redirect_params['sid']);
+    $new_status_filter = $redirect_params['status_filter'] ?? 'all';
+    $show_receipt_on_redirect = true;
 
-    if ($newStatus) {
-        if ($db->updateSessionStatus($sid, $newStatus)) {
-            $_SESSION['toast_message'] = ['text' => "Request #{$sid} has been " . strtolower($newStatus) . ".", 'type' => 'success'];
+    if ($action === 'approve') {
+        // Get student ID from session to check for liabilities
+        $stmt = $db->db->prepare("SELECT StudentID FROM borrowing_sessions WHERE SessionID = ?");
+        $stmt->execute([$sid]);
+        $studentId = $stmt->fetchColumn();
+
+        if ($studentId) {
+            $unresolvedCount = $db->countUnresolvedLiabilities($studentId);
+            if ($unresolvedCount > 0) {
+                $plural = $unresolvedCount > 1 ? 's' : '';
+                $_SESSION['toast_message'] = ['text' => "Cannot approve. Student has {$unresolvedCount} unresolved settlement{$plural}.", 'type' => 'error'];
+            } else {
+                // No unresolved damages, proceed with approval
+                if ($db->approveRequest($sid, $handlerId)) {
+                    $_SESSION['toast_message'] = ['text' => "Request #{$sid} has been approved.", 'type' => 'success'];
+                    $new_status_filter = 'Approved';
+                } else {
+                    $_SESSION['toast_message'] = ['text' => "Action failed for Request #{$sid}.", 'type' => 'error'];
+                }
+            }
+        } else {
+            $_SESSION['toast_message'] = ['text' => "Could not find student for Request #{$sid}.", 'type' => 'error'];
+        }
+    } elseif ($action === 'reject') {
+        if ($db->updateSessionStatus($sid, 'Rejected')) {
+            $_SESSION['toast_message'] = ['text' => "Request #{$sid} has been rejected.", 'type' => 'success'];
+            $show_receipt_on_redirect = false; // Rejected items are removed from view
         } else {
             $_SESSION['toast_message'] = ['text' => "Action failed for Request #{$sid}.", 'type' => 'error'];
         }
     } elseif ($action === 'issue') {
-        if ($db->finalizeHandover($sid)) {
+        if ($db->finalizeHandover($sid, $handlerId)) {
             $_SESSION['toast_message'] = ['text' => "Apparatus successfully issued for Request #{$sid}!", 'type' => 'success'];
+            $new_status_filter = 'Issued';
         } else {
             $_SESSION['toast_message'] = ['text' => "Handover failed for Request #{$sid}.", 'type' => 'error'];
         }
     }
-    header("Location: handover.php"); // Redirect to clean URL
+
+    // Set the new status filter for the redirect
+    $redirect_params['status_filter'] = $new_status_filter;
+
+    // Add instruction to show the receipt for the processed item, unless it was rejected
+    if ($show_receipt_on_redirect) {
+        $redirect_params['show_receipt_sid'] = $sid;
+    }
+
+    $queryString = http_build_query($redirect_params);
+    header("Location: handover.php?" . $queryString);
     exit();
 }
 
@@ -82,6 +120,10 @@ $base_query = "FROM borrowing_sessions bs
                LEFT JOIN lab_activities la ON bs.ActivityID = la.ActivityID
                LEFT JOIN activity_assignments aa ON la.ActivityID = aa.ActivityID
                LEFT JOIN classes c ON aa.ClassID = c.ClassID
+               LEFT JOIN users u_approver ON bs.approver_user_id = u_approver.UserID
+               LEFT JOIN lookup_masterlist m_approver ON u_approver.MasterID = m_approver.MasterID
+               LEFT JOIN users u_handler ON bs.handler_user_id = u_handler.UserID
+               LEFT JOIN lookup_masterlist m_handler ON u_handler.MasterID = m_handler.MasterID
                WHERE $where_clauses";
 
 // Get total records
@@ -93,7 +135,9 @@ $total_pages = ceil($total_records / $records_per_page);
 
 $sort_direction = (strtolower($date_sort) === 'asc') ? 'ASC' : 'DESC';
 // Fetch paginated data
-$query = "SELECT bs.SessionID, bs.Status, bs.CreatedAt, m.Full_Name as StudentName, m.ID_Number as studentId, COALESCE(c.Class_Name, 'General') as Class_Name, COALESCE(la.Title, 'Independent Research') as Title, bs.Remarks, bs.QR_Code_Data
+$query = "SELECT bs.SessionID, u.UserID as StudentID, bs.Status, bs.CreatedAt, m.Full_Name as StudentName, m.ID_Number as studentId, COALESCE(c.Class_Name, 'General') as Class_Name, COALESCE(la.Title, 'Independent Research') as Title, bs.Remarks, bs.QR_Code_Data,
+          m_approver.Full_Name as ApproverName,
+          m_handler.Full_Name as HandlerName
           " . $base_query . "
           GROUP BY bs.SessionID
           ORDER BY FIELD(bs.Status, 'Pending', 'Approved', 'Issued', 'Returned'), bs.CreatedAt {$sort_direction}
@@ -126,6 +170,7 @@ foreach ($sessions as $session) {
     $sessionData['activityTitle'] = $session['Title'];
     $sessionData['date'] = $session['CreatedAt'];
     $sessionData['sessionId'] = $session['SessionID'];
+    $sessionData['unresolved_cases'] = $db->countUnresolvedLiabilities($session['StudentID']);
     $sessionsForJs[$session['SessionID']] = $sessionData;
 }
 
@@ -530,18 +575,29 @@ $page_title = "Handover Terminal";
             let buttonsHtml = '';
             const sid = sessionData.SessionID;
 
+             // Get current filters to pass them along in action links
+            const urlParams = new URLSearchParams(window.location.search);
+            const preservedParams = new URLSearchParams();
+            ['search', 'class_filter', 'status_filter', 'date_sort', 'per_page'].forEach(param => {
+                if (urlParams.has(param)) {
+                    preservedParams.set(param, urlParams.get(param));
+                }
+            });
+            const preservedQueryString = preservedParams.toString();
+
+
             if (sessionData.Status === 'Pending') {
                 buttonsHtml = `
-                    <a href="?action=reject&sid=${sid}" class="w-full text-center rounded-lg bg-white border border-red-200 px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-50 transition-colors">
+                    <a href="?action=reject&sid=${sid}&${preservedQueryString}" class="w-full text-center rounded-lg bg-white border border-red-200 px-4 py-3 text-sm font-bold text-red-500 hover:bg-red-50 transition-colors">
                         Reject
                     </a>
-                    <a href="?action=approve&sid=${sid}" class="w-full text-center rounded-lg bg-orange-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/20 hover:bg-orange-600 transition-all">
+                    <a href="?action=approve&sid=${sid}&${preservedQueryString}" class="w-full text-center rounded-lg bg-orange-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/20 hover:bg-orange-600 transition-all">
                         Approve
                     </a>
                 `;
             } else if (sessionData.Status === 'Approved') {
                 buttonsHtml = `
-                    <a href="?action=issue&sid=${sid}" class="w-full text-center rounded-lg bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 transition-all">
+                   <a href="?action=issue&sid=${sid}&${preservedQueryString}" class="w-full text-center rounded-lg bg-indigo-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 transition-all">
                         Confirm Handover
                     </a>
                 `;
@@ -582,6 +638,14 @@ $page_title = "Handover Terminal";
                     <div class="flex justify-between"><span>Date:</span><span>${new Date(sessionData.date).toLocaleString()}</span></div>
                     <div class="flex justify-between items-start"><span>Activity:</span><span class="text-right w-1/2 truncate">${sessionData.activityTitle}</span></div>
                     <div class="flex justify-between"><span>Session:</span><span>#${sessionData.sessionId}</span></div>
+                    ${['Pending', 'Approved', 'Issued', 'Returned', 'Cancelled'].includes(sessionData.Status) ?
+                        `<div class="flex justify-between"><span>Approved By:</span><span class="font-bold">${sessionData.ApproverName || '(Pending Approval)'}</span></div>`
+                        : ''
+                    }
+                    ${['Pending', 'Approved', 'Issued', 'Returned'].includes(sessionData.Status) ?
+                        `<div class="flex justify-between"><span>${sessionData.Status === 'Returned' ? 'Handled By:' : 'Issued By:'}</span><span class="font-bold">${sessionData.HandlerName || '(Pending Handover)'}</span></div>`
+                        : ''
+                    }
                 </div>
 
                 <div class="mb-6">
@@ -594,8 +658,19 @@ $page_title = "Handover Terminal";
                     </div>
                 </div>
 
-                <div class="mt-auto pt-4 text-center text-xs text-slate-500">
-                    *** ${sessionData.Status.toUpperCase()} ***
+                <div class="mt-auto pt-4 text-center">
+                    ${sessionData.unresolved_cases > 0 ? `
+                    <div class="mb-4 p-3 bg-red-50 border-2 border-dashed border-red-200 rounded-xl animate__animated animate__shakeX">
+                        <p class="text-xs font-black text-red-600 uppercase tracking-wider">Liability Warning</p>
+                        <p class="text-[10px] text-red-500 font-bold mb-2">Student has ${sessionData.unresolved_cases} unresolved case(s).</p>
+                        <a href="settlement_reviews.php?view=all_cases&search=${encodeURIComponent(sessionData.studentName)}" class="inline-block bg-red-500 text-white px-4 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-red-600 transition-all shadow-md shadow-red-500/20">
+                            View Cases
+                        </a>
+                    </div>
+                    ` : ''}
+                    <div class="text-xs text-slate-500">
+                        *** ${sessionData.Status.toUpperCase()} ***
+                    </div>
                 </div>
             `;
 
@@ -677,13 +752,22 @@ $page_title = "Handover Terminal";
             document.getElementById('qr-reader-results').innerText = '';
         }
 
-        <?php
-        if (isset($_SESSION['toast_message'])) {
-            $toast = $_SESSION['toast_message'];
-            unset($_SESSION['toast_message']);
-            echo "document.addEventListener('DOMContentLoaded', () => showToast('" . addslashes($toast['text']) . "', '" . $toast['type'] . "'));";
-        }
-        ?>
+        document.addEventListener('DOMContentLoaded', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const receiptToShow = urlParams.get('show_receipt_sid');
+
+            if (receiptToShow && allSessionsData[receiptToShow]) {
+                showReceipt(allSessionsData[receiptToShow]);
+            }
+
+            <?php
+            if (isset($_SESSION['toast_message'])) {
+                $toast = $_SESSION['toast_message'];
+                unset($_SESSION['toast_message']);
+                echo "showToast('" . addslashes($toast['text']) . "', '" . $toast['type'] . "');";
+            }
+            ?>
+        });
     </script>
      <?php include '../../includes/layout_footer.php'; ?>   
 </body>

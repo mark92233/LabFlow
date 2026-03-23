@@ -2,8 +2,8 @@
 session_start();
 require_once __DIR__ . '/../../dbRelated/operation.php';
 
-// Access Control: Student only
-if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'Student') {
+// Access Control: Any logged-in user can view their own liabilities.
+if (!isset($_SESSION['user_id'])) {
     header("Location: ../../index.php");
     exit();
 }
@@ -177,7 +177,7 @@ $page_title = "My Liabilities";
             if (!hasEvidence && !hasProof) { imagesHtml = `<div class="w-full text-center p-4 bg-slate-100 rounded-lg text-xs text-slate-400 font-medium">No images submitted for this case.</div>`; }
             
             const isResolved = caseData.status === 'Resolved';
-            const isRejected = caseData.status === 'Unresolved' && caseData.notes && caseData.proof_image === null;
+            const isRejected = caseData.status === 'Unresolved' && caseData.notes && caseData.proof_image === null; // A case is considered rejected if it's unresolved, has notes, and the proof image has been cleared.
 
             let buttonsHtml = '';
             if (isResolved) {
@@ -186,7 +186,42 @@ $page_title = "My Liabilities";
                 buttonsHtml = `<form action="settlement_cases.php" method="POST" enctype="multipart/form-data" class="w-full space-y-3"><input type="hidden" name="damage_id" value="${caseData.damage_id}"><input type="hidden" name="action" value="submit_proof"><div><label class="block text-xs font-bold text-gray-500 mb-2">Settlement Method:</label><div class="flex gap-2"><label class="flex-1 p-3 border-2 border-gray-200 rounded-xl flex items-center gap-3 cursor-pointer hover:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500 transition-all"><input type="radio" name="settlement_mode" value="payment" class="w-4 h-4 text-blue-600 focus:ring-blue-500" checked><span class="text-xs font-bold text-gray-700">Pay Fine</span></label><label class="flex-1 p-3 border-2 border-gray-200 rounded-xl flex items-center gap-3 cursor-pointer hover:border-blue-500 has-[:checked]:bg-blue-50 has-[:checked]:border-blue-500 transition-all"><input type="radio" name="settlement_mode" value="replacement" class="w-4 h-4 text-blue-600 focus:ring-blue-500"><span class="text-xs font-bold text-gray-700">Replace Item</span></label></div></div><label class="block text-xs font-bold text-gray-500 pt-2">Upload Proof:</label><div id="dropzone-${caseData.damage_id}" ondrop="dropHandler(event, ${caseData.damage_id});" ondragover="dragOverHandler(event);" ondragleave="dragLeaveHandler(event);" class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-xl hover:border-blue-500 hover:bg-blue-50 transition-colors duration-300"><div class="space-y-1 text-center"><svg class="mx-auto h-10 w-10 text-gray-400" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true"><path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg><div class="flex text-xs text-gray-600"><label for="proof_image_${caseData.damage_id}" class="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none"><span>Upload a file</span><input id="proof_image_${caseData.damage_id}" name="proof_image" type="file" class="sr-only" accept="image/*,application/pdf" onchange="fileChangeHandler(event, ${caseData.damage_id})" required></label><p class="pl-1">or drag and drop</p></div><p id="filename-${caseData.damage_id}" class="text-xs text-emerald-600 font-bold pt-2"></p></div></div><button type="submit" class="w-full py-3 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 transition-all">Submit Proof</button></form>`;
             } else { buttonsHtml = `<div class="w-full py-3 bg-blue-100 text-blue-600 rounded-xl text-xs font-black uppercase tracking-widest text-center">Proof Submitted, Awaiting Review</div>`; }
 
-            const contentHtml = `<div class="bg-white rounded-2xl shadow-xl border border-slate-200/50 h-full flex flex-col"><div class="p-6 flex-1 overflow-y-auto custom-scrollbar"><div class="flex gap-4 mb-4">${imagesHtml}</div><h4 class="text-lg font-black text-slate-800 uppercase italic">${caseData.Item_Name}</h4><p class="text-xs text-slate-500 font-bold uppercase tracking-widest">Case ID: <span class="text-blue-600">#${caseData.damage_id}</span></p><div class="bg-slate-50 p-4 rounded-xl border border-slate-100 my-4 relative"><div class="grid grid-cols-2 gap-4 text-xs"><div><span class="block text-slate-400 font-bold uppercase text-[9px]">Damage Type</span><span class="font-bold text-slate-700">${caseData.damage_type}</span></div><div><span class="block text-slate-400 font-bold uppercase text-[9px]">Quantity Damaged</span><span class="font-bold text-slate-700">${caseData.qty_damaged} of ${caseData.qty_borrowed || '?'}</span></div>${isRejected ? `<div class="col-span-2 mt-2 pt-4 border-t border-dashed border-slate-200"><div class="bg-red-50 border-l-4 border-red-400 p-3 rounded-r-lg"><h4 class="text-[10px] font-black text-red-600 uppercase tracking-widest mb-1">Faculty Feedback (Proof Rejected)</h4><p class="italic text-red-700 text-sm">"${caseData.notes}"</p></div></div>` : `<div class="col-span-2"><span class="block text-slate-400 font-bold uppercase text-[9px]">Notes</span><p class="italic text-slate-600">${caseData.notes || 'No remarks provided.'}</p></div>`} ${caseData.settlement_mode ? `<div class="col-span-2 pt-2 mt-2 border-t border-slate-200"><span class="block text-slate-400 font-bold uppercase text-[9px]">Settlement Method</span><span class="font-bold text-slate-700 capitalize">${caseData.settlement_mode}</span></div>` : ''}</div></div></div><div class="p-4 border-t border-slate-100 bg-slate-50/50"><div class="flex gap-3">${buttonsHtml}</div></div></div>`;
+            const contentHtml = `<div class="bg-white rounded-2xl shadow-xl border border-slate-200/50 h-full flex flex-col">
+                <div class="p-6 flex-1 overflow-y-auto custom-scrollbar">
+                    <div class="flex gap-4 mb-4">${imagesHtml}</div>
+                    <h4 class="text-lg font-black text-slate-800 uppercase italic">${caseData.Item_Name}</h4>
+                    <p class="text-xs text-slate-500 font-bold uppercase tracking-widest">Reported By: <span class="text-blue-600">${caseData.HandlerName || '(Not Recorded)'}</span></p>
+                    
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 my-4 relative">
+                        <div class="grid grid-cols-2 gap-4 text-xs">
+                            <div><span class="block text-slate-400 font-bold uppercase text-[9px]">Reported By</span><span class="font-bold text-slate-700">${caseData.HandlerName || '(Not Recorded)'}</span></div>
+                            <div><span class="block text-slate-400 font-bold uppercase text-[9px]">Date Logged</span><span class="font-bold text-slate-700">${new Date(caseData.logged_at).toLocaleDateString()}</span></div>
+                            <div><span class="block text-slate-400 font-bold uppercase text-[9px]">Damage Type</span><span class="font-bold text-slate-700">${caseData.damage_type}</span></div>
+                            <div><span class="block text-slate-400 font-bold uppercase text-[9px]">Quantity Damaged</span><span class="font-bold text-slate-700">${caseData.qty_damaged} of ${caseData.qty_borrowed || '?'}</span></div>
+                            
+                            ${isRejected ? `
+                                <div class="col-span-2 mt-2 pt-4 border-t border-dashed border-slate-200">
+                                    <div class="bg-red-50 border-l-4 border-red-400 p-3 rounded-r-lg">
+                                        <div class="flex justify-between items-center mb-1">
+                                            <h4 class="text-[10px] font-black text-red-600 uppercase tracking-widest">Faculty Feedback (Proof Rejected)</h4>
+                                            ${caseData.ResolverName ? `<span class="text-[9px] font-bold text-red-500">by ${caseData.ResolverName}</span>` : ''}
+                                        </div>
+                                        <p class="italic text-red-700 text-sm">"${caseData.notes}"</p>
+                                    </div>
+                                </div>` : `<div class="col-span-2"><span class="block text-slate-400 font-bold uppercase text-[9px]">Notes</span><p class="italic text-slate-600">${caseData.notes || 'No remarks provided.'}</p></div>`}
+                            
+                            ${caseData.settlement_mode ? `<div class="col-span-2 pt-2 mt-2 border-t border-slate-200"><span class="block text-slate-400 font-bold uppercase text-[9px]">Settlement Method</span><span class="font-bold text-slate-700 capitalize">${caseData.settlement_mode}</span></div>` : ''}
+
+                            ${caseData.status === 'Resolved' ?
+                                `<div class="col-span-2 pt-2 mt-2 border-t border-slate-200"><span class="block text-slate-400 font-bold uppercase text-[9px]">Resolved By</span><span class="font-bold text-slate-700">${caseData.ResolverName || '(Not Recorded)'}</span></div>` :
+                                (caseData.status === 'Under Review' ?
+                                    `<div class="col-span-2 pt-2 mt-2 border-t border-slate-200"><span class="block text-slate-400 font-bold uppercase text-[9px]">Reviewed By</span><span class="font-bold text-slate-700">(Pending Faculty Review)</span></div>` : '')
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="p-4 border-t border-slate-100 bg-slate-50/50"><div class="flex gap-3">${buttonsHtml}</div></div>
+            </div>`;
             wrapper.innerHTML = contentHtml;
             emptyState.classList.add('hidden');
             wrapper.classList.remove('hidden');

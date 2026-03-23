@@ -15,6 +15,9 @@ switch ($role) {
     case 'Teacher':
         header("Location: teacher_dash.php");
         break;
+    case 'LabTech':
+        header("Location: ../includes/labtech_dash.php");
+        break;
     case 'Student':
         header("Location: student_dash.php");
         break;

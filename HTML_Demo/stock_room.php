@@ -2,8 +2,8 @@
 session_start();
 require_once '../dbRelated/operation.php';
 
-// Access Control: Only Teacher and Admin can see this page
-if (!isset($_SESSION['user_id']) || !in_array($_SESSION['user_role'], ['Admin', 'Teacher'])) {
+// Access Control: Only Teacher, Admin, and LabTech can see this page
+if (!isset($_SESSION['user_id']) || !in_array($_SESSION['user_role'], ['Admin', 'Teacher', 'LabTech'])) {
     header("Location: /LabFlow/index.php");
     exit();
 }
@@ -201,7 +201,7 @@ $page_title = "Stock Room Layout";
                         <p class="text-sm text-gray-500 mt-1" x-text="editMode ? 'Draw new shelves on the blueprint.' : 'Live view of the mapped shelves.'"></p>
                     </div>
                     <div class="flex items-center gap-4">
-                        <?php if (in_array($role, ['Admin', 'Teacher'])): ?>
+                        <?php if (in_array($role, ['Admin', 'LabTech'])): ?>
                             <!-- View Mode Button -->
                             <button x-show="!editMode" @click="toggleEditMode()" class="px-6 py-3 rounded-xl font-bold text-xs uppercase tracking-widest transition-all shadow-lg flex items-center gap-2 bg-gray-800 text-white hover:bg-gray-900">
                                 <svg x-show="!editMode" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path></svg>

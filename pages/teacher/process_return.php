@@ -2,8 +2,8 @@
 session_start();
 require_once '../../dbRelated/operation.php';
 
-// 1. Access Control & Initial Setup
-if (!isset($_SESSION['user_id']) || !in_array($_SESSION['user_role'], ['Teacher', 'Admin'])) {
+// 1. Access Control & Initial Setup - Admin, Teacher, or LabTech
+if (!isset($_SESSION['user_id']) || !in_array($_SESSION['user_role'], ['Admin', 'Teacher', 'LabTech'])) {
     header("Location: ../../index.php");
     exit();
 }
@@ -20,9 +20,10 @@ if (!$sid) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_return'])) {
     $session_id_post = $_POST['session_id'];
     $return_type = $_POST['process_return'];
+    $handlerId = $_SESSION['user_id']; // The current admin/teacher is the one processing the return
 
     if ($return_type === 'clean') {
-        if ($db->processCleanReturn($session_id_post)) {
+        if ($db->processCleanReturn($session_id_post, $handlerId)) {
             $_SESSION['toast_message'] = ['text' => "Session #{$session_id_post} marked as returned.", 'type' => 'success'];
         } else {
             $_SESSION['toast_message'] = ['text' => "Failed to process clean return for #{$session_id_post}.", 'type' => 'error'];
@@ -32,13 +33,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_return'])) {
         $filtered_damage_data = array_filter($damage_data, fn($report) => !empty($report['qty']) && $report['qty'] > 0);
 
         if (empty($filtered_damage_data)) {
-            if ($db->processCleanReturn($session_id_post)) {
+            if ($db->processCleanReturn($session_id_post, $handlerId)) {
                 $_SESSION['toast_message'] = ['text' => "Session #{$session_id_post} marked as returned (no damages logged).", 'type' => 'success'];
             } else {
                 $_SESSION['toast_message'] = ['text' => "Failed to process clean return for #{$session_id_post}.", 'type' => 'error'];
             }
         } else {
-            if ($db->processReturnWithDamage($session_id_post, $filtered_damage_data)) {
+            if ($db->processReturnWithDamage($session_id_post, $filtered_damage_data, $handlerId)) {
                 $_SESSION['toast_message'] = ['text' => "Return with damages for #{$session_id_post} has been logged.", 'type' => 'success'];
             } else {
                 $_SESSION['toast_message'] = ['text' => "Failed to process return with damages for #{$session_id_post}.", 'type' => 'error'];

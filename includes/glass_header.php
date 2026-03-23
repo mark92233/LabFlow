@@ -16,13 +16,10 @@ $page_map = [
     $base_url . 'pages/teacher/add_activity.php' => ['label' => 'New Activity', 'parent' => $base_url . 'pages/teacher/class_activities.php'],
     $base_url . 'pages/teacher/activity_hub.php' => ['label' => 'Activity Hub', 'parent' => $base_url . 'pages/teacher/class_activities.php'],
     $base_url . 'pages/teacher/grading_view.php' => ['label' => 'Grading', 'parent' => $base_url . 'pages/teacher/activity_hub.php'],
-    $base_url . 'pages/teacher/clearance_hub.php' => ['label' => 'Clearance', 'parent' => $base_url . 'pages/teacher/manage_classes.php'],
     
     // Admin/LabTech
-    $base_url . 'pages/teacher/handover.php' => ['label' => 'Handover Terminal', 'parent' => $base_url . 'dashboard/router.php'],
-    $base_url . 'pages/teacher/settlement_reviews.php' => ['label' => 'Settlement Reviews', 'parent' => $base_url . 'dashboard/router.php'],
     $base_url . 'pages/teacher/request_list.php' => ['label' => 'Borrowing Queue', 'parent' => $base_url . 'dashboard/router.php'],
-    $base_url . 'pages/teacher/process_return.php' => ['label' => 'Process Return', 'parent' => $base_url . 'pages/teacher/handover.php'],
+    $base_url . 'pages/teacher/process_return.php' => ['label' => 'Process Return', 'parent' => $base_url . 'dashboard/router.php'],
 
     // Common
     $base_url . 'pages/common/inventory_hub.php' => ['label' => 'Inventory', 'parent' => $base_url . 'dashboard/router.php'],
@@ -34,6 +31,9 @@ $page_map = [
     $base_url . 'pages/admin/manage_users.php' => ['label' => 'User Management', 'parent' => $base_url . 'dashboard/router.php'],
 
     // Student
+    $base_url . 'pages/common/profile.php' => ['label' => 'My Profile', 'parent' => $base_url . 'dashboard/router.php'],
+    $base_url . 'pages/common/change_password.php' => ['label' => 'Change Password', 'parent' => $base_url . 'pages/common/profile.php'],
+    $base_url . 'pages/labtech/labtech_dash.php' => ['label' => 'Dashboard', 'parent' => $base_url . 'dashboard/router.php'],
     $base_url . 'dashboard/student_dash.php' => ['label' => 'Dashboard', 'parent' => $base_url . 'dashboard/router.php'],
     $base_url . 'pages/student/my_classes.php' => ['label' => 'My Classes', 'parent' => $base_url . 'dashboard/student_dash.php'],
     $base_url . 'pages/student/lab_list.php' => ['label' => 'Class Activities', 'parent' => $base_url . 'pages/student/my_classes.php'],

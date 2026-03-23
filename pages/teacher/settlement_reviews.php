@@ -2,8 +2,8 @@
 session_start();
 require_once __DIR__ . '/../../dbRelated/operation.php';
 
-// Access Control: Teacher or Admin
-if (!isset($_SESSION['user_id']) || ($_SESSION['user_role'] !== 'Teacher' && $_SESSION['user_role'] !== 'Admin')) {
+// Access Control: Teacher, Admin, or LabTech
+if (!isset($_SESSION['user_id']) || !in_array($_SESSION['user_role'], ['Admin', 'LabTech'])) {
     header("Location: ../../index.php");
     exit();
 }
@@ -14,13 +14,14 @@ $db = new DataManager();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['action'], $_POST['damage_id'])) {
         $id = $_POST['damage_id'];
+        $handlerId = $_SESSION['user_id'];
         if ($_POST['action'] === 'resolve') {
-            $db->resolveDamage($id);
+            $db->resolveDamage($id, $handlerId);
             $_SESSION['toast_message'] = ['text' => "Case #{$id} has been resolved.", 'type' => 'success'];
         } elseif ($_POST['action'] === 'reject') {
             $_SESSION['toast_message'] = ['text' => "Proof for Case #{$id} has been rejected.", 'type' => 'error'];
             $notes = trim($_POST['rejection_notes'] ?? 'Proof rejected by faculty.');
-            $db->rejectDamage($id, $notes);
+            $db->rejectDamage($id, $notes, $handlerId);
         } elseif ($_POST['action'] === 'submit_proof' && isset($_FILES['proof_image'])) {
             $settlement_mode = $_POST['settlement_mode'] ?? null;
             $result = $db->submitDamageProof($id, $settlement_mode, $_FILES['proof_image']);
@@ -35,9 +36,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
+$search = trim($_GET['search'] ?? '');
 $view_mode = $_GET['view'] ?? 'all_cases';
 if ($view_mode === 'my_cases') {
-    $cases = $db->getSettlementCases('personal_all', '', '', $_SESSION['user_id']);
+    $cases = $db->getSettlementCases('personal_all', $search, '', $_SESSION['user_id']);
     // Sort to show pending cases first, then resolved ones.
     usort($cases, function ($a, $b) {
         $statusOrder = ['Unresolved' => 1, 'Under Review' => 2, 'Resolved' => 3];
@@ -50,7 +52,7 @@ if ($view_mode === 'my_cases') {
     });
 } else { // 'all_cases' is the only other view
     $view_mode = 'all_cases';
-    $cases = $db->getSettlementCases('pending');
+    $cases = $db->getSettlementCases('pending', $search);
 }
 
 $casesForJs = [];
@@ -305,7 +307,7 @@ $page_title = "Settlement Reviews";
                         </div>
                         <h4 class="text-lg font-black text-slate-800 uppercase italic">${caseData.Item_Name}</h4>
                         <p class="text-xs text-slate-500 font-bold uppercase tracking-widest">
-                            Reported by: <span class="text-blue-600">${caseData.Full_Name}</span>
+                            Reported by: <span class="text-blue-600">${caseData.HandlerName || '(Not Recorded)'}</span>
                         </p>
                         <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 my-4 relative">
                             <div class="grid grid-cols-2 gap-4 text-xs">
@@ -455,13 +457,20 @@ $page_title = "Settlement Reviews";
             toast.classList.remove('hidden'); toast.style.opacity = '1'; toast.style.transform = 'translateY(0)';
             setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateY(20px)'; setTimeout(() => { toast.classList.add('hidden'); }, 500); }, 4000);
         }
-        <?php
-        if (isset($_SESSION['toast_message'])) {
-            $toast = $_SESSION['toast_message'];
-            unset($_SESSION['toast_message']);
-            echo "document.addEventListener('DOMContentLoaded', () => showToast('" . addslashes($toast['text']) . "', '" . $toast['type'] . "'));";
-        }
-        ?>
+        document.addEventListener('DOMContentLoaded', () => {
+            <?php
+            if (isset($_SESSION['toast_message'])) {
+                $toast = $_SESSION['toast_message'];
+                unset($_SESSION['toast_message']);
+                echo "showToast('" . addslashes($toast['text']) . "', '" . $toast['type'] . "');";
+            }
+            $highlight_id = $_GET['highlight_id'] ?? null;
+            if ($highlight_id && !empty($casesForJs[$highlight_id])) {
+                echo "showCaseDetails(" . json_encode($casesForJs[$highlight_id]) . ");";
+                echo "const row = document.getElementById('row-{$highlight_id}'); if(row) { row.scrollIntoView({behavior: 'smooth', block: 'center'}); }";
+            }
+            ?>
+        });
     </script>
     <?php include '../../includes/layout_footer.php'; ?>
 </body>

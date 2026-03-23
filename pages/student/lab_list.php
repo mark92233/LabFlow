@@ -50,19 +50,14 @@ $page_title = "Class Activities";
 
             <main class="p-8 animate-reveal max-w-7xl mx-auto w-full">
                 
-                <header class="mb-12 flex items-center gap-6">
-                    <a href="my_classes.php" class="p-3 bg-white border border-slate-100 rounded-2xl text-slate-400 hover:text-blue-600 transition-all shadow-sm group">
-                        <svg class="w-6 h-6 transform group-hover:-translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
-                        </svg>
-                    </a>
+                <header class="mb-12">
                     <div>
                         <h2 class="text-4xl font-black text-[#0f172a] uppercase italic tracking-tighter leading-none mb-2">
                             <?= htmlspecialchars($class_info['Class_Name'] ?? 'Class') ?> 
-                            <span class="text-blue-600">Activities.</span>
+                            <span class="text-orange-500">Activities.</span>
                         </h2>
                         <div class="flex items-center gap-2">
-                            <span class="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
+                            <span class="w-2 h-2 bg-orange-500 rounded-full animate-pulse"></span>
                             <p class="text-slate-400 font-bold uppercase text-[10px] tracking-widest italic">
                                 Section: <?= htmlspecialchars($class_info['Section'] ?? 'N/A') ?> • Semester: <?= htmlspecialchars($class_info['Semester'] ?? 'N/A') ?>
                             </p>
@@ -75,12 +70,12 @@ $page_title = "Class Activities";
                     <form id="filterForm" method="GET" class="md:col-span-3">
                         <input type="hidden" name="class_id" value="<?= htmlspecialchars($class_id) ?>">
                         <input type="hidden" name="sort" value="<?= htmlspecialchars($sort) ?>">
-                        <input type="search" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Search by activity title..." class="w-full bg-white border-gray-200 p-4 rounded-xl font-medium text-sm shadow-sm focus:ring-2 focus:ring-blue-500 transition-all">
+                        <input type="search" name="search" value="<?= htmlspecialchars($search) ?>" placeholder="Search by activity title..." class="w-full bg-white border-gray-200 p-4 rounded-xl font-medium text-sm shadow-sm focus:ring-2 focus:ring-orange-500 transition-all">
                     </form>
                     <form id="sortForm" method="GET" class="md:col-span-2">
                         <input type="hidden" name="class_id" value="<?= htmlspecialchars($class_id) ?>">
                         <input type="hidden" name="search" value="<?= htmlspecialchars($search) ?>">
-                        <select name="sort" onchange="this.form.submit()" class="w-full bg-white border-gray-200 p-4 rounded-xl font-medium text-sm shadow-sm focus:ring-2 focus:ring-blue-500 transition-all h-full">
+                        <select name="sort" onchange="this.form.submit()" class="w-full bg-white border-gray-200 p-4 rounded-xl font-medium text-sm shadow-sm focus:ring-2 focus:ring-orange-500 transition-all h-full">
                             <option value="deadline_desc" <?= $sort == 'deadline_desc' ? 'selected' : '' ?>>Sort by: Deadline (Soonest)</option>
                             <option value="created_asc" <?= $sort == 'created_asc' ? 'selected' : '' ?>>Sort by: Date Added (Oldest)</option>
                             <option value="title_asc" <?= $sort == 'title_asc' ? 'selected' : '' ?>>Sort by: Title (A-Z)</option>
@@ -133,7 +128,7 @@ $page_title = "Class Activities";
                                         </span>
                                     </td>
                                     <td class="px-6 py-4 text-center align-middle">
-                                        <a href="activity_view.php?activity_id=<?= $act['ActivityID'] ?>&class_id=<?= $class_id ?>" class="px-5 py-2.5 bg-slate-800 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all">
+                                        <a href="activity_view.php?activity_id=<?= $act['ActivityID'] ?>&class_id=<?= $class_id ?>" class="px-5 py-2.5 bg-slate-800 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-orange-600 transition-all">
                                             Open
                                         </a>
                                     </td>

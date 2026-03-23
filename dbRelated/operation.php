@@ -801,91 +801,281 @@ class DataManager {
 
     // --- ADMIN DASHBOARD ANALYTICS ---
     public function getAdminKPIs() {
-        // MOCK DATA for demonstration purposes
-        $stats = [];
+        // --- MOCK DATA BLOCK ---
+        // Set to true to use mock data, false to use the live database.
+        $useMockData = true;
 
-        // 1. Inventory Stats
-        $stats['unique_items'] = 128;
-        $stats['total_stock'] = 2450;
-        $stats['lowest_stock_items'] = [
-            ['Item_Name' => 'Test Tubes', 'Available_Qty' => 5],
-            ['Item_Name' => 'Filter Paper', 'Available_Qty' => 8],
-            ['Item_Name' => 'Pipette Tips', 'Available_Qty' => 12],
-            ['Item_Name' => 'Ethanol 95%', 'Available_Qty' => 15],
-        ];
-
-        // 2. User & Request Stats
-        $stats['total_users'] = 450;
-        $stats['pending_reqs'] = 12;
-        $stats['open_damages'] = 3;
-
-        // 3. Population Stats
-        $stats['user_population_by_role'] = [
-            ['Role' => 'Student', 'count' => 420],
-            ['Role' => 'Teacher', 'count' => 25],
-            ['Role' => 'Admin', 'count' => 5],
-        ];
-        $stats['student_pop'] = 420;
-        $stats['teacher_pop'] = 25;
-        $stats['total_classes'] = 15;
-
-        // Class Demographics for chart
-        $stats['class_demographics'] = [
-            ['Class_Name' => 'GenChem 1', 'Section' => 'STEM-12A', 'student_count' => 35],
-            ['Class_Name' => 'GenChem 1', 'Section' => 'STEM-12B', 'student_count' => 38],
-            ['Class_Name' => 'Physics 2', 'Section' => 'STEM-12C', 'student_count' => 32],
-            ['Class_Name' => 'Biology Lab', 'Section' => 'BSBio-2', 'student_count' => 28],
-        ];
-
-        // 4. Graph Data: Inventory by Category
-        $stats['categories'] = [
-            ['Category_Name' => 'Glassware', 'count' => 45],
-            ['Category_Name' => 'Chemicals', 'count' => 60],
-            ['Category_Name' => 'Apparatus', 'count' => 23],
-        ];
-
-        // 5. Graph Data: Session Status
-        $stats['session_stats'] = [
-            ['Status' => 'Pending', 'count' => 12],
-            ['Status' => 'Approved', 'count' => 8],
-            ['Status' => 'Issued', 'count' => 25],
-            ['Status' => 'Returned', 'count' => 150],
-            ['Status' => 'Cancelled', 'count' => 5],
-        ];
-
-        // 6. Graph Data: Damage Status
-        $stats['damage_stats'] = [
-            ['status' => 'Unresolved', 'count' => 3],
-            ['status' => 'Under Review', 'count' => 2],
-            ['status' => 'Resolved', 'count' => 18],
-        ];
-
-        // 7. Trend Data: Borrowing (Last 7 Days)
-        $stats['borrowing_trend'] = [];
-        for ($i = 6; $i >= 0; $i--) {
-            $stats['borrowing_trend'][] = [
-                'date' => date('Y-m-d', strtotime("-$i days")),
-                'count' => rand(5, 25),
+        if ($useMockData) {
+            return [
+                'total_stock' => 2450,
+                'total_users' => 450,
+                'pending_reqs' => 12,
+                'open_damages' => 3,
+                'categories' => [
+                    ['Category_Name' => 'Glassware', 'count' => 45],
+                    ['Category_Name' => 'Chemicals', 'count' => 60],
+                    ['Category_Name' => 'Apparatus', 'count' => 23],
+                    ['Category_Name' => 'Electronics', 'count' => 15],
+                    ['Category_Name' => 'Safety', 'count' => 10],
+                ],
+                'session_stats' => [
+                    ['Status' => 'Pending', 'count' => 12],
+                    ['Status' => 'Approved', 'count' => 8],
+                    ['Status' => 'Issued', 'count' => 25],
+                    ['Status' => 'Returned', 'count' => 150],
+                    ['Status' => 'Cancelled', 'count' => 5],
+                ],
+                'lowest_stock_items' => [
+                    ['Item_Name' => 'Test Tubes (Small)', 'Available_Qty' => 5],
+                    ['Item_Name' => 'Filter Paper (Round)', 'Available_Qty' => 8],
+                    ['Item_Name' => 'Pipette Tips (100ul)', 'Available_Qty' => 12],
+                    ['Item_Name' => 'Ethanol 95% (500ml)', 'Available_Qty' => 15],
+                    ['Item_Name' => 'Beaker (50ml)', 'Available_Qty' => 18],
+                    ['Item_Name' => 'Bunsen Burner', 'Available_Qty' => 20],
+                    ['Item_Name' => 'Safety Goggles', 'Available_Qty' => 25],
+                    ['Item_Name' => 'Stirring Rods', 'Available_Qty' => 30],
+                    ['Item_Name' => 'Conical Flask (100ml)', 'Available_Qty' => 35],
+                    ['Item_Name' => 'Measuring Cylinder (10ml)', 'Available_Qty' => 40],
+                ],
+                'user_population_by_role' => [
+                    ['Role' => 'Student', 'count' => 420],
+                    ['Role' => 'Teacher', 'count' => 25],
+                    ['Role' => 'Admin', 'count' => 5],
+                ],
+                'total_classes' => 15,
+                'class_demographics' => [
+                    ['Class_Name' => 'GenChem 1', 'Section' => 'STEM-12A', 'student_count' => 35],
+                    ['Class_Name' => 'GenChem 1', 'Section' => 'STEM-12B', 'student_count' => 38],
+                    ['Class_Name' => 'Physics 2', 'Section' => 'STEM-12C', 'student_count' => 32],
+                    ['Class_Name' => 'Biology Lab', 'Section' => 'BSBio-2', 'student_count' => 28],
+                    ['Class_Name' => 'Adv. Chem', 'Section' => 'BSChem-3', 'student_count' => 20],
+                ],
+                'damage_stats' => [
+                    ['status' => 'Unresolved', 'count' => 3],
+                    ['status' => 'Under Review', 'count' => 2],
+                    ['status' => 'Resolved', 'count' => 18],
+                ],
             ];
         }
+        // --- END MOCK DATA BLOCK ---
 
-        // 8. Trend Data: Damages (Last 7 Days)
-        $stats['damage_trend'] = [];
-        for ($i = 6; $i >= 0; $i--) {
-            $stats['damage_trend'][] = [
-                'date' => date('Y-m-d', strtotime("-$i days")),
-                'count' => rand(0, 3),
-            ];
+        // Original logic for fetching live data (if $useMockData is false)
+        $stats = [
+            'total_stock' => 0,
+            'total_users' => 0,
+            'pending_reqs' => 0,
+            'open_damages' => 0,
+            'categories' => [],
+            'session_stats' => [],
+            'lowest_stock_items' => [],
+            'user_population_by_role' => [],
+            'total_classes' => 0,
+            'class_demographics' => [],
+            'damage_stats' => [],
+        ];
+
+        try {
+            // Total Stock
+            $stock_sql = "SELECT SUM(Total_Qty) FROM inventory";
+            $stats['total_stock'] = (int)$this->db->query($stock_sql)->fetchColumn();
+
+            // Total Users
+            $users_sql = "SELECT COUNT(UserID) FROM users";
+            $stats['total_users'] = (int)$this->db->query($users_sql)->fetchColumn();
+
+            // Pending Requests (Borrowing Sessions)
+            $pending_reqs_sql = "SELECT COUNT(SessionID) FROM borrowing_sessions WHERE Status = 'Pending'";
+            $stats['pending_reqs'] = (int)$this->db->query($pending_reqs_sql)->fetchColumn();
+
+            // Open Damages
+            $open_damages_sql = "SELECT COUNT(damage_id) FROM damaged_returns WHERE status IN ('Unresolved', 'Under Review')";
+            $stats['open_damages'] = (int)$this->db->query($open_damages_sql)->fetchColumn();
+
+            // Inventory Composition (Categories)
+            $categories_sql = "SELECT c.Category_Name, COUNT(i.ItemID) as count FROM categories c LEFT JOIN inventory i ON c.CategoryID = i.CategoryID GROUP BY c.Category_Name ORDER BY c.Category_Name";
+            $stats['categories'] = $this->db->query($categories_sql)->fetchAll(PDO::FETCH_ASSOC);
+
+            // Borrowing Session Status
+            $session_stats_sql = "SELECT Status, COUNT(SessionID) as count FROM borrowing_sessions GROUP BY Status ORDER BY Status";
+            $stats['session_stats'] = $this->db->query($session_stats_sql)->fetchAll(PDO::FETCH_ASSOC);
+
+            // Lowest Stock Items (Top 20)
+            $lowest_stock_sql = "SELECT Item_Name, Available_Qty FROM inventory ORDER BY Available_Qty ASC LIMIT 20";
+            $stats['lowest_stock_items'] = $this->db->query($lowest_stock_sql)->fetchAll(PDO::FETCH_ASSOC);
+
+            // User Population by Role
+            $user_pop_sql = "SELECT Role, COUNT(MasterID) as count FROM lookup_masterlist GROUP BY Role ORDER BY Role";
+            $stats['user_population_by_role'] = $this->db->query($user_pop_sql)->fetchAll(PDO::FETCH_ASSOC);
+
+            // Total Classes
+            $total_classes_sql = "SELECT COUNT(ClassID) FROM classes";
+            $stats['total_classes'] = (int)$this->db->query($total_classes_sql)->fetchColumn();
+
+            // Class Demographics (Example: student count per class)
+            $class_demographics_sql = "SELECT c.Class_Name, c.Section, COUNT(ce.MasterID) as student_count FROM classes c LEFT JOIN class_enrollment ce ON c.ClassID = ce.ClassID GROUP BY c.ClassID ORDER BY c.Class_Name, c.Section LIMIT 5";
+            $stats['class_demographics'] = $this->db->query($class_demographics_sql)->fetchAll(PDO::FETCH_ASSOC);
+
+            // Damage Status
+            $damage_stats_sql = "SELECT status, COUNT(damage_id) as count FROM damaged_returns GROUP BY status ORDER BY status";
+            $stats['damage_stats'] = $this->db->query($damage_stats_sql)->fetchAll(PDO::FETCH_ASSOC);
+
+        } catch (PDOException $e) {
+            error_log("getAdminKPIs Error: " . $e->getMessage());
+            // Return default empty stats on error
         }
 
         return $stats;
     }
 
+    public function getLabTechDashboardData() {
+        // --- MOCK DATA BLOCK ---
+        // This function provides mock data for the LabTech dashboard charts.
+        return [
+            'pending_reqs_count' => 18,
+            'approved_reqs_count' => 7,
+            'issued_items_count' => 23,
+            'pending_settlements_count' => 5,
+            'pending_by_class' => [
+                ['class_name' => 'BS Biology 2A', 'count' => 5],
+                ['class_name' => 'BS Chemistry 1B', 'count' => 8],
+                ['class_name' => 'BS Physics 3A', 'count' => 3],
+                ['class_name' => 'General Research', 'count' => 2],
+            ],
+            'handover_trend' => [
+                ['date' => date('Y-m-d', strtotime('-6 days')), 'count' => 5],
+                ['date' => date('Y-m-d', strtotime('-5 days')), 'count' => 8],
+                ['date' => date('Y-m-d', strtotime('-4 days')), 'count' => 6],
+                ['date' => date('Y-m-d', strtotime('-3 days')), 'count' => 12],
+                ['date' => date('Y-m-d', strtotime('-2 days')), 'count' => 9],
+                ['date' => date('Y-m-d', strtotime('-1 day')), 'count' => 15],
+                ['date' => date('Y-m-d'), 'count' => 7],
+            ],
+            'overdue_items' => [
+                ['item_name' => 'Microscope', 'days_overdue' => 12],
+                ['item_name' => 'Bunsen Burner', 'days_overdue' => 9],
+                ['item_name' => 'Volumetric Flask (500ml)', 'days_overdue' => 7],
+                ['item_name' => 'Digital Scale', 'days_overdue' => 5],
+                ['item_name' => 'Hot Plate', 'days_overdue' => 3],
+            ],
+            'damage_types' => [
+                ['type' => 'Broken', 'count' => 4],
+                ['type' => 'Lost', 'count' => 1],
+                ['type' => 'Dirty', 'count' => 3],
+                ['type' => 'Malfunction', 'count' => 2],
+            ],
+        ];
+    }
+
+    public function getAdminDashboardData() {
+        // --- MOCK DATA BLOCK ---
+        // Set to true to use mock data, false to use the live database.
+        $useMockData = true;
+
+        if ($useMockData) {
+            return [
+                'inventory_health' => [
+                    'Available' => 1250,
+                    'Issued' => 320,
+                    'Damaged' => 45,
+                    'Lost' => 12,
+                ],
+                'variant_distribution' => [
+                    ['VariantName' => 'Beaker (50ml)', 'Variant_Available_Qty' => 5],
+                    ['VariantName' => 'Pipette (10ml)', 'Variant_Available_Qty' => 8],
+                    ['VariantName' => 'Test Tube (Small)', 'Variant_Available_Qty' => 15],
+                    ['VariantName' => 'Graduated Cylinder (100ml)', 'Variant_Available_Qty' => 20],
+                    ['VariantName' => 'Beaker (250ml)', 'Variant_Available_Qty' => 22],
+                ],
+                'system_users' => [
+                    [
+                        'ID_Number' => '2024-001', 'Full_Name' => 'Maria Clara', 'Role' => 'Student',
+                        'Confirmed_Email' => 'm.clara@wmsu.edu.ph', 'CreatedAt' => '2026-03-15 10:00:00', 'Is_Verified' => 1
+                    ],
+                    [
+                        'ID_Number' => '2024-002', 'Full_Name' => 'Crisostomo Ibarra', 'Role' => 'Student',
+                        'Confirmed_Email' => 'c.ibarra@wmsu.edu.ph', 'CreatedAt' => '2026-03-14 09:00:00', 'Is_Verified' => 1
+                    ],
+                    [
+                        'ID_Number' => 'T-101', 'Full_Name' => 'Jose Rizal', 'Role' => 'Teacher',
+                        'Confirmed_Email' => 'j.rizal@wmsu.edu.ph', 'CreatedAt' => '2026-02-20 08:00:00', 'Is_Verified' => 1
+                    ],
+                    [
+                        'ID_Number' => '2024-003', 'Full_Name' => 'Elias Salvador', 'Role' => 'Student',
+                        'Confirmed_Email' => null, 'CreatedAt' => null, 'Is_Verified' => 0
+                    ],
+                ]
+            ];
+        }
+        // --- END MOCK DATA BLOCK ---
+
+        $data = [
+            'inventory_health' => [],
+            'variant_distribution' => [],
+            'system_users' => [],
+        ];
+    
+        try {
+            // 1. Master Inventory Health
+            $available_sql = "SELECT SUM(Available_Qty) FROM inventory";
+            $available = (int)$this->db->query($available_sql)->fetchColumn();
+    
+            $issued_sql = "SELECT SUM(bi.Quantity) FROM borrowed_items bi JOIN borrowing_sessions bs ON bi.SessionID = bs.SessionID WHERE bs.Status = 'Issued'";
+            $issued = (int)$this->db->query($issued_sql)->fetchColumn();
+    
+            $damages_sql = "SELECT damage_type, SUM(qty_damaged) as total FROM damaged_returns WHERE status IN ('Unresolved', 'Under Review') GROUP BY damage_type";
+            $stmt = $this->db->query($damages_sql);
+            $damages = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+            $damaged = (int)($damages['Damaged'] ?? 0);
+            $lost = (int)($damages['Lost'] ?? 0);
+    
+            $data['inventory_health'] = [
+                'Available' => $available,
+                'Issued' => $issued,
+                'Damaged' => $damaged,
+                'Lost' => $lost,
+            ];
+    
+            // 2. Variant Distribution
+            $variant_sql = "SELECT CONCAT(i.Item_Name, ' (', iv.Size_Value, iv.Unit, ')') as VariantName, iv.Variant_Available_Qty 
+                            FROM item_variants iv 
+                            JOIN inventory i ON iv.ItemID = i.ItemID 
+                            WHERE i.is_scalable = 1 AND iv.Variant_Available_Qty > 0
+                            ORDER BY iv.Variant_Available_Qty ASC
+                            LIMIT 10"; // Limit to 10 lowest stock variants for a clean chart
+            $stmt = $this->db->query($variant_sql);
+            $data['variant_distribution'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+            // 3. System Activity & Security
+            $users_sql = "SELECT m.ID_Number, m.Full_Name, m.Role, u.Confirmed_Email, u.CreatedAt, m.is_verified as Is_Verified
+                          FROM lookup_masterlist m 
+                          LEFT JOIN users u ON m.MasterID = u.MasterID 
+                          ORDER BY u.CreatedAt DESC, m.Full_Name ASC
+                          LIMIT 20"; // Limit for summary view
+            $stmt = $this->db->query($users_sql);
+            $data['system_users'] = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+        } catch (PDOException $e) {
+            error_log("getAdminDashboardData Error: " . $e->getMessage());
+            return [
+                'inventory_health' => ['Available' => 0, 'Issued' => 0, 'Damaged' => 0, 'Lost' => 0],
+                'variant_distribution' => [],
+                'system_users' => [],
+            ];
+        }
+    
+        return $data;
+    }
+
     public function getTeacherDashboardData($teacherID) {
         $data = [
             'total_students' => 0,
+            'total_activities' => 0,
             'total_classes' => 0,
-            'clearance_progress' => []
+            'pending_requests' => 0,
+            'upcoming_deadlines' => [], // For chart
+            'borrowing_by_class' => [], // For chart
+            'my_classes' => [], // For list
+            'recent_activities' => [], // For list
         ];
 
         try {
@@ -898,25 +1088,64 @@ class DataManager {
             $stmt_students->execute(['tid' => $teacherID]);
             $data['total_students'] = (int)$stmt_students->fetchColumn();
 
+            // 2. Total Activities
+            $sql_activities = "SELECT COUNT(DISTINCT la.ActivityID)
+                               FROM lab_activities la
+                               JOIN activity_assignments aa ON la.ActivityID = aa.ActivityID
+                               JOIN classes c ON aa.ClassID = c.ClassID
+                               WHERE c.TeacherID = :tid";
+            $stmt_activities = $this->db->prepare($sql_activities);
+            $stmt_activities->execute(['tid' => $teacherID]);
+            $data['total_activities'] = (int)$stmt_activities->fetchColumn();
+
             // 3. Total Classes
             $sql_classes = "SELECT COUNT(*) FROM classes WHERE TeacherID = :tid";
             $stmt_classes = $this->db->prepare($sql_classes);
             $stmt_classes->execute(['tid' => $teacherID]);
             $data['total_classes'] = (int)$stmt_classes->fetchColumn();
 
-            // 4. Class Clearance Progress
-            $sql_clearance = "SELECT
-                                c.ClassID, c.Class_Name, c.Section,
-                                COUNT(ce.EnrollmentID) AS total_students,
-                                SUM(CASE WHEN ce.ClearanceStatus = 'Cleared' THEN 1 ELSE 0 END) AS cleared_students
+            // 4. Pending Requests for Approval
+            $data['pending_requests'] = $this->countPendingRequests($teacherID);
+
+            // 5. Upcoming Deadlines (for chart)
+            $sql_deadlines = "SELECT la.Title, la.Deadline, c.Class_Name 
+                              FROM lab_activities la 
+                              JOIN activity_assignments aa ON la.ActivityID = aa.ActivityID 
+                              JOIN classes c ON aa.ClassID = c.ClassID 
+                              WHERE c.TeacherID = :tid AND la.Deadline >= NOW() 
+                              ORDER BY la.Deadline ASC LIMIT 5";
+            $stmt_deadlines = $this->db->prepare($sql_deadlines);
+            $stmt_deadlines->execute(['tid' => $teacherID]);
+            $data['upcoming_deadlines'] = $stmt_deadlines->fetchAll(PDO::FETCH_ASSOC);
+
+            // 6. Borrowing Activity by Class (for chart)
+            $sql_borrowing = "SELECT c.Class_Name, c.Section, COUNT(bs.SessionID) as session_count 
                               FROM classes c
-                              LEFT JOIN class_enrollment ce ON c.ClassID = c.ClassID
+                              LEFT JOIN activity_assignments aa ON c.ClassID = aa.ClassID
+                              LEFT JOIN borrowing_sessions bs ON aa.ActivityID = bs.ActivityID
                               WHERE c.TeacherID = :tid
-                              GROUP BY c.ClassID, c.Class_Name, c.Section
-                              ORDER BY c.Class_Name, c.Section";
-            $stmt_clearance = $this->db->prepare($sql_clearance);
-            $stmt_clearance->execute(['tid' => $teacherID]);
-            $data['clearance_progress'] = $stmt_clearance->fetchAll(PDO::FETCH_ASSOC);
+                              GROUP BY c.ClassID 
+                              ORDER BY session_count DESC";
+            $stmt_borrowing = $this->db->prepare($sql_borrowing);
+            $stmt_borrowing->execute(['tid' => $teacherID]);
+            $data['borrowing_by_class'] = $stmt_borrowing->fetchAll(PDO::FETCH_ASSOC);
+
+            // 7. Get Teacher's Classes for list view
+            $data['my_classes'] = $this->getTeacherClasses($teacherID);
+
+            // 8. Get Recent Activities for list view
+            $sql_recent = "SELECT la.ActivityID, la.Title, la.CreatedAt, c.Class_Name, c.ClassID
+                           FROM lab_activities la
+                           JOIN activity_assignments aa ON la.ActivityID = aa.ActivityID
+                           JOIN classes c ON aa.ClassID = c.ClassID
+                           WHERE c.TeacherID = :tid
+                           GROUP BY la.ActivityID
+                           ORDER BY la.CreatedAt DESC
+                           LIMIT 5";
+            $stmt_recent = $this->db->prepare($sql_recent);
+            $stmt_recent->execute(['tid' => $teacherID]);
+            $data['recent_activities'] = $stmt_recent->fetchAll(PDO::FETCH_ASSOC);
+
         } catch (PDOException $e) {
             error_log("Teacher Dashboard Data Error: " . $e->getMessage());
             return []; // Return empty array on error
@@ -927,13 +1156,16 @@ class DataManager {
     public function getStudentDashboardData($studentID) {
         $data = [
             'my_classes' => [],
+            'class_activity_counts' => [], // For chart
             'upcoming_deadlines' => [],
             'pending_sessions' => 0,
             'issued_sessions' => 0,
+            'unresolved_liabilities' => 0,
+            'session_stats' => [], // For chart
         ];
 
         try {
-            // 1. Get Classes and Activity Counts
+            // 1. Get Classes
             $sql_classes = "SELECT 
                                 c.ClassID, c.Class_Name, c.Section, c.Semester, m.Full_Name as TeacherName
                             FROM class_enrollment ce
@@ -941,33 +1173,48 @@ class DataManager {
                             JOIN users u_teacher ON c.TeacherID = u_teacher.UserID
                             JOIN lookup_masterlist m ON u_teacher.MasterID = m.MasterID
                             JOIN users u_student ON ce.MasterID = u_student.MasterID
-                            WHERE u_student.UserID = :sid";
+                            WHERE u_student.UserID = :sid
+                            ORDER BY c.Class_Name";
             $stmt_classes = $this->db->prepare($sql_classes);
             $stmt_classes->execute(['sid' => $studentID]);
             $data['my_classes'] = $stmt_classes->fetchAll(PDO::FETCH_ASSOC);
 
-            // 2. Get Upcoming Deadlines
+            // 2. Get Activity counts per class for chart
+            $sql_activities = "SELECT c.Class_Name, c.Section, COUNT(aa.ActivityID) as activity_count
+                               FROM class_enrollment ce
+                               JOIN classes c ON ce.ClassID = c.ClassID
+                               LEFT JOIN activity_assignments aa ON c.ClassID = aa.ClassID
+                               JOIN users u ON ce.MasterID = u.MasterID
+                               WHERE u.UserID = :sid
+                               GROUP BY c.ClassID
+                               ORDER BY c.Class_Name";
+            $stmt_activities = $this->db->prepare($sql_activities);
+            $stmt_activities->execute(['sid' => $studentID]);
+            $data['class_activity_counts'] = $stmt_activities->fetchAll(PDO::FETCH_ASSOC);
+
+            // 3. Get Upcoming Deadlines
             $sql_deadlines = "SELECT la.ActivityID, la.Title, la.Deadline, c.Class_Name, c.ClassID
                               FROM lab_activities la
                               JOIN activity_assignments aa ON la.ActivityID = aa.ActivityID
                               JOIN classes c ON aa.ClassID = c.ClassID
                               JOIN class_enrollment ce ON c.ClassID = ce.ClassID
                               JOIN users u ON ce.MasterID = u.MasterID
-                              WHERE u.UserID = :sid AND la.Deadline >= NOW()
-                              GROUP BY la.ActivityID
-                              ORDER BY la.Deadline ASC
-                              LIMIT 3";
+                              WHERE u.UserID = :sid AND la.Deadline >= NOW() GROUP BY la.ActivityID ORDER BY la.Deadline ASC LIMIT 5";
             $stmt_deadlines = $this->db->prepare($sql_deadlines);
             $stmt_deadlines->execute(['sid' => $studentID]);
             $data['upcoming_deadlines'] = $stmt_deadlines->fetchAll(PDO::FETCH_ASSOC);
 
-            // 3. Get Session Counts
-            $sql_sessions = "SELECT Status, COUNT(*) as count FROM borrowing_sessions WHERE StudentID = :sid AND Status IN ('Pending', 'Issued') GROUP BY Status";
+            // 4. Get Session Counts
+            $sql_sessions = "SELECT Status, COUNT(*) as count FROM borrowing_sessions WHERE StudentID = :sid AND Status IN ('Pending', 'Issued', 'Approved', 'Returned', 'Cancelled') GROUP BY Status";
             $stmt_sessions = $this->db->prepare($sql_sessions);
             $stmt_sessions->execute(['sid' => $studentID]);
             $counts = $stmt_sessions->fetchAll(PDO::FETCH_KEY_PAIR);
             $data['pending_sessions'] = $counts['Pending'] ?? 0;
             $data['issued_sessions'] = $counts['Issued'] ?? 0;
+            $data['session_stats'] = $counts;
+
+            // 5. Get Unresolved Liabilities
+            $data['unresolved_liabilities'] = $this->countUnresolvedLiabilities($studentID);
 
         } catch (PDOException $e) {
             error_log("Student Dashboard Data Error: " . $e->getMessage());
@@ -980,17 +1227,15 @@ class DataManager {
     }
 
     // Approve a borrowing request and generate a new QR code
-    public function approveRequest($sessionId, $teacherId) {
-        $newHash = $this->generateQRHash($teacherId);
+    public function approveRequest($sessionId, $approverId) {
+        $newHash = $this->generateQRHash($approverId);
         $query = "UPDATE borrowing_sessions SET 
                   Status = 'Approved', 
-                  ApproverName = (SELECT Full_Name FROM lookup_masterlist m 
-                                 JOIN users u ON m.MasterID = u.MasterID 
-                                 WHERE u.UserID = :tid),
+                  approver_user_id = :approverId,
                   QR_Code_Data = :hash
                   WHERE SessionID = :sid AND Status = 'Pending'";
         $stmt = $this->db->prepare($query);
-        return $stmt->execute(['sid' => $sessionId, 'tid' => $teacherId, 'hash' => $newHash]);
+        return $stmt->execute(['sid' => $sessionId, 'approverId' => $approverId, 'hash' => $newHash]);
     }
 
 
@@ -1339,7 +1584,7 @@ public function getSessionForActivity($studentID, $activityID) {
  *
  * This is called when the student physically receives the items.
  */
-public function finalizeHandover($sid) {
+public function finalizeHandover($sid, $handlerId) {
     try {
         $this->db->beginTransaction();
 
@@ -1369,10 +1614,12 @@ public function finalizeHandover($sid) {
             $uStmt->execute(['qty' => $item['Quantity'], 'iid' => $item['ItemID']]);
         }
 
-        // 4. Update Status [cite: 2025-12-06]
-        $updateStatus = "UPDATE borrowing_sessions SET Status = 'Issued' WHERE SessionID = :sid";
+        // 4. Update Status and record the handler
+        $updateStatus = "UPDATE borrowing_sessions 
+                         SET Status = 'Issued', handler_user_id = :handlerId 
+                         WHERE SessionID = :sid";
         $sStmt = $this->db->prepare($updateStatus);
-        $sStmt->execute(['sid' => $sid]);
+        $sStmt->execute(['sid' => $sid, 'handlerId' => $handlerId]);
 
         $this->db->commit();
         return true;
@@ -1388,7 +1635,7 @@ public function finalizeHandover($sid) {
  *
  * This is called when items are returned in good condition.
  */
-public function processReturn($sid, $remarks) {
+public function processReturn($sid, $remarks, $handlerId) {
     try {
         // 1. Get items for this session
         $query = "SELECT ItemID, Quantity FROM borrowed_items WHERE SessionID = :sid";
@@ -1409,10 +1656,12 @@ public function processReturn($sid, $remarks) {
             }
         }
 
-        // 3. Finalize Session [cite: 2025-12-06]
-        $updateStatus = "UPDATE borrowing_sessions SET Status = 'Returned', Remarks = :rem WHERE SessionID = :sid";
+        // 3. Finalize Session and record the handler
+        $updateStatus = "UPDATE borrowing_sessions 
+                         SET Status = 'Returned', Remarks = :rem, handler_user_id = :handlerId 
+                         WHERE SessionID = :sid";
         $sStmt = $this->db->prepare($updateStatus);
-        $sStmt->execute(['sid' => $sid, 'rem' => $remarks]);
+        $sStmt->execute(['sid' => $sid, 'rem' => $remarks, 'handlerId' => $handlerId]);
 
         if ($updatedCount === 0 && !empty($items)) {
             $this->lastError = "Inventory was not updated. Please check if ItemIDs still exist.";
@@ -1563,7 +1812,7 @@ public function getEnrollmentWithSubmissions($activityID, $classID) {
 }
 
 // Process a return that includes damaged items (Restocks good items, logs damages)
-public function processReturnWithDamage($session_id, $damage_data) {
+public function processReturnWithDamage($session_id, $damage_data, $handlerId) {
     if (!$this->db) { return false; }
 
     try {
@@ -1590,7 +1839,7 @@ public function processReturnWithDamage($session_id, $damage_data) {
 
         // C. Prepare Statements
         $stmt_restock = $this->db->prepare("UPDATE inventory SET Available_Qty = Available_Qty + ? WHERE ItemID = ?");
-        $stmt_damage_log = $this->db->prepare("INSERT INTO damaged_returns (session_id, item_id, student_id, qty_damaged, damage_type, status, notes, evidence_image) VALUES (?, ?, ?, ?, ?, 'Unresolved', ?, ?)");
+        $stmt_damage_log = $this->db->prepare("INSERT INTO damaged_returns (session_id, item_id, student_id, reported_by_user_id, qty_damaged, damage_type, status, notes, evidence_image) VALUES (?, ?, ?, ?, ?, ?, 'Unresolved', ?, ?)");
 
         $reported_damage_map = [];
         
@@ -1631,6 +1880,7 @@ public function processReturnWithDamage($session_id, $damage_data) {
                     $session_id,
                     $iID,
                     $real_student_id, // Secure ID
+                    $handlerId,       // The user reporting the damage
                     $qty_bad,
                     $report['type'],
                     $report['notes'],
@@ -1654,8 +1904,11 @@ public function processReturnWithDamage($session_id, $damage_data) {
 
         // F. Close Session
         // We flag it as 'has_damage' so it shows up in your Settlement Page
-        $sql_update = "UPDATE borrowing_sessions SET Status = 'Returned', has_damage = 1, Remarks = 'Returned with damages' WHERE SessionID = ?";
-        $this->db->prepare($sql_update)->execute([$session_id]);
+        $sql_update = "UPDATE borrowing_sessions 
+                       SET Status = 'Returned', has_damage = 1, Remarks = 'Returned with damages', handler_user_id = ? 
+                       WHERE SessionID = ?";
+        $stmt_update = $this->db->prepare($sql_update);
+        $stmt_update->execute([$handlerId, $session_id]);
 
         $this->db->commit();
         return true;
@@ -1668,7 +1921,7 @@ public function processReturnWithDamage($session_id, $damage_data) {
 }
 
 // Process a return where all items are in good condition
-public function processCleanReturn($session_id) {
+public function processCleanReturn($session_id, $handlerId) {
         if (!$this->db) { return false; }
 
         try {
@@ -1689,8 +1942,11 @@ public function processCleanReturn($session_id) {
             }
 
             // C. Close Session
-            $sql_update = "UPDATE borrowing_sessions SET Status = 'Returned', has_damage = 0, Remarks = 'Returned in good condition' WHERE SessionID = ?";
-            $this->db->prepare($sql_update)->execute([$session_id]);
+            $sql_update = "UPDATE borrowing_sessions 
+                           SET Status = 'Returned', has_damage = 0, Remarks = 'Returned in good condition', handler_user_id = ? 
+                           WHERE SessionID = ?";
+            $stmt_update = $this->db->prepare($sql_update);
+            $stmt_update->execute([$handlerId, $session_id]);
 
             $this->db->commit();
             return true;
@@ -1715,8 +1971,6 @@ public function processCleanReturn($session_id) {
                     FROM damaged_returns dr
                     JOIN inventory i ON dr.item_id = i.ItemID
                     JOIN borrowing_sessions bs ON dr.session_id = bs.SessionID
-                    LEFT JOIN inventory i ON dr.item_id = i.ItemID
-                    LEFT JOIN borrowing_sessions bs ON dr.session_id = bs.SessionID
                     WHERE dr.student_id = ? AND dr.status IN ('Unresolved', 'Under Review')";
             
             $stmt = $this->db->prepare($sql);
@@ -2098,7 +2352,9 @@ public function getSettlementCases($view = 'pending', $search = '', $class_id = 
                     c.Section,
                     bi.Quantity as qty_borrowed,
                     iv.Size_Value,
-                    iv.Unit
+                    iv.Unit,
+                    m_handler.Full_Name as HandlerName,
+                    m_resolver.Full_Name as ResolverName
                 FROM damaged_returns dr
                 JOIN inventory i ON dr.item_id = i.ItemID
                 JOIN users u ON dr.student_id = u.UserID
@@ -2109,6 +2365,10 @@ public function getSettlementCases($view = 'pending', $search = '', $class_id = 
                 LEFT JOIN lab_activities la ON bs.ActivityID = la.ActivityID
                 LEFT JOIN activity_assignments aa ON la.ActivityID = aa.ActivityID
                 LEFT JOIN classes c ON aa.ClassID = c.ClassID
+                LEFT JOIN users u_handler ON dr.reported_by_user_id = u_handler.UserID
+                LEFT JOIN lookup_masterlist m_handler ON u_handler.MasterID = m_handler.MasterID
+                LEFT JOIN users u_resolver ON dr.resolved_by_user_id = u_resolver.UserID
+                LEFT JOIN lookup_masterlist m_resolver ON u_resolver.MasterID = m_resolver.MasterID
                 WHERE $statusCondition 
                 $searchLogic 
                 $classLogic
@@ -2168,21 +2428,25 @@ public function getSettlementCases($view = 'pending', $search = '', $class_id = 
     }
 
     // Mark a damage case as resolved
-    public function resolveDamage($damage_id) {
+    public function resolveDamage($damage_id, $adminId) {
         if (!$this->db) { return false; }
         try {
-            $sql = "UPDATE damaged_returns SET status = 'Resolved' WHERE damage_id = ?";
-            return $this->db->prepare($sql)->execute([$damage_id]);
+            $sql = "UPDATE damaged_returns 
+                    SET status = 'Resolved', resolved_by_user_id = ? 
+                    WHERE damage_id = ?";
+            return $this->db->prepare($sql)->execute([$adminId, $damage_id]);
         } catch (PDOException $e) { return false; }
     }
 
     // Reject proof of settlement (Student must re-upload)
-    public function rejectDamage($damage_id, $rejection_notes = null) {
+    public function rejectDamage($damage_id, $adminId, $rejection_notes = null) {
         if (!$this->db) { return false; }
         try {
             // Reset status to Unresolved, clear the image proof, and add rejection notes
-            $sql = "UPDATE damaged_returns SET status = 'Unresolved', proof_image = NULL, notes = ? WHERE damage_id = ?";
-            return $this->db->prepare($sql)->execute([$rejection_notes, $damage_id]);
+            $sql = "UPDATE damaged_returns 
+                    SET status = 'Unresolved', proof_image = NULL, notes = ?, resolved_by_user_id = ? 
+                    WHERE damage_id = ?";
+            return $this->db->prepare($sql)->execute([$rejection_notes, $adminId, $damage_id]);
         } catch (PDOException $e) { return false; }
     }
 
@@ -2943,62 +3207,194 @@ public function previewSmartGroups($classIdArray, $limit) {
         }
     }
 
-    public function getUserProfilePageData($userID) {
+    public function getUserProfilePageData($userId, $userRole) {
         if (!$this->db) { return []; }
 
-        $profileData = [
-            'identity' => [],
-            'accountability' => [],
-            'history' => [],
-            'stockroom_zone' => [],
+        $data = [
+            'identity' => $this->getUserProfileData($userId),
+            'role_specific' => [],
         ];
 
         try {
-            // 1. Identity
-            $identitySql = "SELECT 
-                                m.MasterID, m.Full_Name, m.ID_Number, m.Role,
-                                c.Class_Name, c.Section
-                            FROM users u
-                            JOIN lookup_masterlist m ON u.MasterID = m.MasterID
-                            LEFT JOIN class_enrollment ce ON m.MasterID = ce.MasterID
-                            LEFT JOIN classes c ON ce.ClassID = c.ClassID
-                            WHERE u.UserID = ?
-                            LIMIT 1";
-            $stmt = $this->db->prepare($identitySql);
-            $stmt->execute([$userID]);
-            $identityData = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
-            
-            if (!empty($identityData)) {
-                $identityData['SectionName'] = ($identityData['Class_Name'] && $identityData['Section']) 
-                    ? $identityData['Class_Name'] . ' - ' . $identityData['Section'] 
-                    : 'Not Enrolled';
-                unset($identityData['Class_Name'], $identityData['Section']);
+            switch ($userRole) {
+                case 'Student':
+                    $studentData = $this->getStudentDashboardData($userId);
+                    $liabilityData = $this->checkLiability($userId);
+                    $data['role_specific'] = [
+                        'items_borrowed' => $studentData['issued_sessions'] ?? 0,
+                        'active_requisitions' => $studentData['pending_sessions'] ?? 0,
+                        'unresolved_liabilities' => count($liabilityData['items']),
+                        'is_cleared' => !$liabilityData['has_liability'] && ($studentData['issued_sessions'] ?? 0) === 0,
+                        'upcoming_deadlines' => $studentData['upcoming_deadlines'] ?? [],
+                        'classes' => $this->getStudentEnrolledClasses($userId),
+                    ];
+                    break;
+                case 'Teacher':
+                    $data['role_specific']['classes'] = $this->getTeacherClasses($userId);
+                    $data['role_specific']['recent_activities'] = array_slice($this->getTeacherActivities($userId), 0, 5);
+                    $data['role_specific']['action_center']['pending_reqs'] = $this->countPendingRequests($userId);
+                    
+                    $stmt = $this->db->prepare("SELECT COUNT(DISTINCT dr.student_id) FROM damaged_returns dr JOIN borrowing_sessions bs ON dr.session_id = bs.SessionID JOIN activity_assignments aa ON bs.ActivityID = aa.ActivityID JOIN classes c ON aa.ClassID = c.ClassID WHERE c.TeacherID = :tid AND dr.status IN ('Unresolved', 'Under Review')");
+                    $stmt->execute([':tid' => $userId]);
+                    $data['role_specific']['action_center']['unresolved_liabilities'] = $stmt->fetchColumn();
+                    break;
+                case 'LabTech':
+                    $kpiData = $this->getLabTechDashboardData(); // This is mock data
+                    $handledSlipsQuery = "SELECT bs.SessionID, bs.Status, bs.CreatedAt, m.Full_Name as StudentName FROM borrowing_sessions bs JOIN users u ON bs.StudentID = u.UserID JOIN lookup_masterlist m ON u.MasterID = m.MasterID WHERE bs.approver_user_id = :uid OR bs.handler_user_id = :uid ORDER BY bs.CreatedAt DESC LIMIT 5";
+                    $stmt = $this->db->prepare($handledSlipsQuery);
+                    $stmt->execute([':uid' => $userId]);
+                    $handledTransactions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                    $data['role_specific']['kpis'] = [
+                        'pending_reqs' => $kpiData['pending_reqs_count'],
+                        'for_handover' => $kpiData['approved_reqs_count'],
+                        'awaiting_return' => $kpiData['issued_items_count'],
+                        'pending_settlements' => $kpiData['pending_settlements_count'],
+                    ];
+                    $data['role_specific']['handled_transactions'] = $handledTransactions;
+                    $data['role_specific']['handover_trend'] = $kpiData['handover_trend']; // For chart
+                    break;
+                case 'Admin':
+                    $kpiData = $this->getAdminKPIs(); // This is mock data
+                    $actionLog = $this->getAdminActionLog($userId); // This is also mock data
+
+                    $data['role_specific']['kpis'] = [
+                        'total_stock' => $kpiData['total_stock'],
+                        'total_users' => $kpiData['total_users'],
+                        'open_damages' => $kpiData['open_damages'],
+                        'pending_reqs' => $kpiData['pending_reqs'],
+                    ];
+                    $data['role_specific']['user_distribution'] = $kpiData['user_population_by_role'];
+                    $data['role_specific']['inventory_composition'] = $kpiData['categories'];
+                    $data['role_specific']['action_log'] = $actionLog;
+                    break;
             }
-            $profileData['identity'] = $identityData;
-
-            if (!empty($profileData['identity'])) {
-                // 2. Accountability
-                $issuedSql = "SELECT SUM(bi.Quantity) 
-                              FROM borrowed_items bi
-                              JOIN borrowing_sessions bs ON bi.SessionID = bs.SessionID
-                              WHERE bs.StudentID = ? AND bs.Status = 'Issued'";
-                $stmt = $this->db->prepare($issuedSql);
-                $stmt->execute([$userID]);
-                $profileData['accountability']['IssuedItemsCount'] = (int)$stmt->fetchColumn();
-                $profileData['accountability']['SubmittedReportsCount'] = 0; // This feature is not currently implemented
-
-                // 3. History
-                $fullHistory = $this->getStudentHistoryWithDetails($userID);
-                $profileData['history'] = array_slice($fullHistory, 0, 5);
-
-                // 4. Stockroom Zone (Placeholder)
-                $profileData['stockroom_zone'] = ['shelf_id' => 'CHEM-A1', 'aisle' => 'Chemistry Wing, Aisle 1'];
-            }
-            return $profileData;
+            return $data;
         } catch (PDOException $e) {
             error_log("getUserProfilePageData Error: " . $e->getMessage());
             return [];
         }
+    }
+
+    /**
+     * Retrieves a log of actions performed by a specific admin.
+     * NOTE: This is a placeholder. A real implementation requires a dedicated `admin_logs` table.
+     * @param int $adminId The UserID of the admin.
+     * @return array An array of log entries.
+     */
+    public function getAdminActionLog($adminId) {
+        // In a real application, you would query a dedicated `admin_logs` table:
+        // $sql = "SELECT * FROM admin_logs WHERE admin_user_id = ? ORDER BY timestamp DESC LIMIT 20";
+        // For this example, we return mock data.
+        return [
+            [
+                'type' => 'INVENTORY',
+                'icon' => 'fa-boxes-stacked',
+                'color' => 'blue',
+                'description' => 'Registered a new item: <strong>Beaker (500ml)</strong>.',
+                'timestamp' => '2026-03-20 11:45:12'
+            ],
+            [
+                'type' => 'SETTLEMENT',
+                'icon' => 'fa-gavel',
+                'color' => 'green',
+                'description' => 'Resolved damage case #102 for student <strong>Maria Clara</strong>.',
+                'timestamp' => '2026-03-20 10:21:05'
+            ],
+            [
+                'type' => 'USER',
+                'icon' => 'fa-user-pen',
+                'color' => 'orange',
+                'description' => 'Updated the role of <strong>Jose Rizal</strong> to <em>Teacher</em>.',
+                'timestamp' => '2026-03-19 16:30:00'
+            ]
+        ];
+    }
+
+    public function getStudentClearanceSummary($studentIdentifier) {
+        // $studentIdentifier can be UserID, MasterID, or ID_Number
+        $sql = "SELECT u.UserID, m.MasterID, m.Full_Name, m.ID_Number, m.Role
+                FROM users u
+                JOIN lookup_masterlist m ON u.MasterID = m.MasterID
+                WHERE u.UserID = :id OR m.MasterID = :id OR m.ID_Number = :id";
+        $stmt = $this->db->prepare($sql);
+        $stmt->execute([':id' => $studentIdentifier]);
+        $studentInfo = $stmt->fetch(PDO::FETCH_ASSOC);
+
+        if (!$studentInfo) {
+            return null; // Student not found
+        }
+
+        $studentID = $studentInfo['UserID'];
+
+        // Fetch all borrowing sessions
+        $sessionSql = "SELECT SessionID, Status, bs.CreatedAt, Remarks,
+                        COALESCE(la.Title, 'Independent Research') as ActivityTitle
+                    FROM borrowing_sessions bs
+                    LEFT JOIN lab_activities la ON bs.ActivityID = la.ActivityID
+                    WHERE bs.StudentID = ?
+                    ORDER BY bs.CreatedAt DESC";
+        $sessionStmt = $this->db->prepare($sessionSql);
+        $sessionStmt->execute([$studentID]);
+        $borrowingSessions = $sessionStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Fetch all damage logs
+        $damageSql = "SELECT dr.*, i.Item_Name
+                    FROM damaged_returns dr
+                    JOIN inventory i ON dr.item_id = i.ItemID
+                    WHERE dr.student_id = ?
+                    ORDER BY dr.logged_at DESC";
+        $damageStmt = $this->db->prepare($damageSql);
+        $damageStmt->execute([$studentID]);
+        $damageLogs = $damageStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Determine overall clearance status
+        $isCleared = true;
+        if (array_search('Issued', array_column($borrowingSessions, 'Status')) !== false) $isCleared = false;
+        if (array_search('Approved', array_column($borrowingSessions, 'Status')) !== false) $isCleared = false;
+        if (array_search('Pending', array_column($borrowingSessions, 'Status')) !== false) $isCleared = false;
+        if (array_search('Unresolved', array_column($damageLogs, 'status')) !== false) $isCleared = false;
+        if (array_search('Under Review', array_column($damageLogs, 'status')) !== false) $isCleared = false;
+
+        return ['student' => $studentInfo, 'sessions' => $borrowingSessions, 'damages' => $damageLogs, 'is_cleared' => $isCleared];
+    }
+
+    public function getStudentFullTransactionHistory($studentId) {
+        // Fetch all borrowing sessions
+        $sessionSql = "SELECT 
+                            SessionID as id,
+                            'borrow' as type,
+                            bs.CreatedAt as date,
+                            Status as status,
+                            COALESCE(la.Title, 'Independent Research') as title
+                       FROM borrowing_sessions bs
+                       LEFT JOIN lab_activities la ON bs.ActivityID = la.ActivityID
+                       WHERE bs.StudentID = ?";
+        $sessionStmt = $this->db->prepare($sessionSql);
+        $sessionStmt->execute([$studentId]);
+        $sessions = $sessionStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Fetch all damage logs
+        $damageSql = "SELECT 
+                          dr.damage_id as id,
+                          'damage' as type,
+                          dr.logged_at as date,
+                          dr.status as status,
+                          i.Item_Name as title
+                      FROM damaged_returns dr
+                      JOIN inventory i ON dr.item_id = i.ItemID
+                      WHERE dr.student_id = ?";
+        $damageStmt = $this->db->prepare($damageSql);
+        $damageStmt->execute([$studentId]);
+        $damages = $damageStmt->fetchAll(PDO::FETCH_ASSOC);
+
+        // Merge and sort
+        $history = array_merge($sessions, $damages);
+        usort($history, function($a, $b) {
+            return strtotime($b['date']) - strtotime($a['date']);
+        });
+
+        return $history;
     }
 }
 }

@@ -8,8 +8,17 @@ if (!isset($_SESSION['user_id'])) {
     exit();
 }
 
+// --- Role-based View Logic ---
+$user_id = $_SESSION['user_id'];
+$user_role = $_SESSION['user_role'] ?? 'Student';
+$is_handler_role = in_array($user_role, ['Admin', 'LabTech', 'Teacher']);
+$view_mode = 'my_slips'; // Default for students or if not specified
+
+if ($is_handler_role) {
+    $view_mode = $_GET['view'] ?? 'handled_slips'; // Default for handlers
+}
+
 $db = new DataManager();
-$student_id = $_SESSION['user_id'];
  
 // --- Get Filters, Search, and Pagination ---
 $search = trim($_GET['search'] ?? '');
@@ -20,8 +29,16 @@ $page = isset($_GET['page']) && is_numeric($_GET['page']) ? (int)$_GET['page'] :
 $offset = ($page - 1) * $records_per_page;
 
 // --- Build Query ---
-$params = ['student_id' => $student_id];
-$where_clauses = "bs.StudentID = :student_id";
+$params = [];
+if ($is_handler_role && $view_mode === 'handled_slips') {
+    $where_clauses = "(bs.approver_user_id = :user_id OR bs.handler_user_id = :user_id)";
+    $params['user_id'] = $user_id;
+    $page_title = "Handled Transactions";
+} else {
+    $where_clauses = "bs.StudentID = :student_id";
+    $params['student_id'] = $user_id;
+    $page_title = "My Transaction History";
+}
 
 if ($status_filter !== 'all') {
     $where_clauses .= " AND bs.Status = :status";
@@ -29,8 +46,12 @@ if ($status_filter !== 'all') {
 }
 
 if (!empty($search)) {
-    // Search by SessionID, Activity Title, or Remarks (Purpose)
-    $where_clauses .= " AND (bs.SessionID LIKE :search OR la.Title LIKE :search OR bs.Remarks LIKE :search)";
+    // For handlers, also search by student name
+    if ($is_handler_role && $view_mode === 'handled_slips') {
+        $where_clauses .= " AND (bs.SessionID LIKE :search OR la.Title LIKE :search OR bs.Remarks LIKE :search OR m.Full_Name LIKE :search)";
+    } else {
+        $where_clauses .= " AND (bs.SessionID LIKE :search OR la.Title LIKE :search OR bs.Remarks LIKE :search)";
+    }
     $params['search'] = "%$search%";
 }
 
@@ -39,6 +60,10 @@ $base_query = "FROM borrowing_sessions bs
                JOIN users u ON bs.StudentID = u.UserID
                JOIN lookup_masterlist m ON u.MasterID = m.MasterID
                LEFT JOIN lab_activities la ON bs.ActivityID = la.ActivityID
+               LEFT JOIN users u_approver ON bs.approver_user_id = u_approver.UserID
+               LEFT JOIN lookup_masterlist m_approver ON u_approver.MasterID = m_approver.MasterID
+               LEFT JOIN users u_handler ON bs.handler_user_id = u_handler.UserID
+               LEFT JOIN lookup_masterlist m_handler ON u_handler.MasterID = m_handler.MasterID
                WHERE $where_clauses";
 
 // Get total records
@@ -50,7 +75,9 @@ $total_pages = ceil($total_records / $records_per_page);
 
 // Fetch paginated data
 $sort_direction = (strtolower($date_sort) === 'asc') ? 'ASC' : 'DESC';
-$query = "SELECT bs.SessionID, bs.Status, bs.CreatedAt, m.Full_Name as StudentName, m.ID_Number as studentId, COALESCE(la.Title, 'Independent Research') as Title, bs.Remarks, bs.QR_Code_Data
+$query = "SELECT bs.SessionID, bs.Status, bs.CreatedAt, m.Full_Name as StudentName, m.ID_Number as studentId, COALESCE(la.Title, 'Independent Research') as Title, bs.Remarks, bs.QR_Code_Data,
+          m_approver.Full_Name as ApproverName,
+          m_handler.Full_Name as HandlerName
           " . $base_query . "
           GROUP BY bs.SessionID
           ORDER BY bs.CreatedAt {$sort_direction}
@@ -72,7 +99,6 @@ foreach ($sessions as $session) {
     $sessionData['items'] = $iStmt->fetchAll(PDO::FETCH_ASSOC);
     $sessionsForJs[$session['SessionID']] = $sessionData;
 }
-$page_title = "My Transaction History";
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -123,15 +149,34 @@ $page_title = "My Transaction History";
                 <!-- Left Column (Main Content) -->
                 <div class="flex-1 flex flex-col gap-6">
                     <header class="mb-2">
-                        <h2 class="text-4xl font-extrabold text-gray-800 tracking-tighter">My Slips.</h2>
-                        <p class="text-slate-400 font-medium text-xs">A record of your borrowing history.</p>
+                        <?php if ($is_handler_role && $view_mode === 'handled_slips'): ?>
+                            <h2 class="text-4xl font-extrabold text-gray-800 tracking-tighter">Handled Slips.</h2>
+                            <p class="text-slate-400 font-medium text-xs">A record of slips you have approved or processed.</p>
+                        <?php else: ?>
+                            <h2 class="text-4xl font-extrabold text-gray-800 tracking-tighter">My Slips.</h2>
+                            <p class="text-slate-400 font-medium text-xs">A record of your borrowing history.</p>
+                        <?php endif; ?>
                     </header>
+
+                    <?php if ($is_handler_role): ?>
+                        <div class="bg-white p-2 rounded-2xl border border-gray-200/50 shadow-sm">
+                            <div class="flex items-center gap-2">
+                                <a href="?view=handled_slips" class="flex-1 text-center px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-300 <?= $view_mode === 'handled_slips' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:bg-gray-50' ?>">
+                                    Handled Transactions
+                                </a>
+                                <a href="?view=my_slips" class="flex-1 text-center px-4 py-3 rounded-xl font-bold text-xs uppercase tracking-wider transition-all duration-300 <?= $view_mode === 'my_slips' ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/20' : 'text-gray-500 hover:bg-gray-50' ?>">
+                                    My Personal Slips
+                                </a>
+                            </div>
+                        </div>
+                    <?php endif; ?>
 
                     <div class="bg-white p-4 rounded-2xl border border-gray-200/50 shadow-sm">
                         <form id="filterForm" method="GET" action="active_slips.php" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                            <input type="hidden" name="view" value="<?= htmlspecialchars($view_mode) ?>">
                             <div class="md:col-span-2">
-                                <label for="search" class="text-xs font-bold text-gray-500 mb-2 block">Search by Slip #, Activity, or Purpose</label>
-                                <input type="search" name="search" id="search" value="<?= htmlspecialchars($search) ?>" placeholder="e.g. 123 or Titration" class="w-full bg-gray-50 border-gray-200 p-3 rounded-xl font-medium text-sm shadow-sm focus:ring-2 focus:ring-orange-500">
+                                <label for="search" class="text-xs font-bold text-gray-500 mb-2 block"><?= ($is_handler_role && $view_mode === 'handled_slips') ? 'Search by Slip #, Student, Activity, or Purpose' : 'Search by Slip #, Activity, or Purpose' ?></label>
+                                <input type="search" name="search" id="search" value="<?= htmlspecialchars($search) ?>" placeholder="<?= ($is_handler_role && $view_mode === 'handled_slips') ? 'e.g. 123 or Juan Dela Cruz' : 'e.g. 123 or Titration' ?>" class="w-full bg-gray-50 border-gray-200 p-3 rounded-xl font-medium text-sm shadow-sm focus:ring-2 focus:ring-orange-500">
                             </div>
                             <div>
                                 <label for="date_sort" class="text-xs font-bold text-gray-500 mb-2 block">Sort by Date</label>
@@ -147,7 +192,10 @@ $page_title = "My Transaction History";
                         <div class="flex items-center gap-2">
                             <?php
                                 $tabs = ['all' => 'All', 'Pending' => 'Pending', 'Approved' => 'Approved', 'Issued' => 'Issued', 'Returned' => 'Returned'];
-                                $base_params = ['search' => $search, 'date_sort' => $date_sort];
+                                $base_params = ['search' => $search, 'date_sort' => $date_sort, 'view' => $view_mode];
+                                if (!$is_handler_role) {
+                                    unset($base_params['view']);
+                                }
                             ?>
                             <?php foreach ($tabs as $key => $label):
                                 $current_params = $base_params;
@@ -168,6 +216,9 @@ $page_title = "My Transaction History";
                                 <table class="w-full text-left">
                                     <thead class="bg-gray-50 border-b border-gray-100 sticky top-0">
                                         <tr>
+                                            <?php if ($is_handler_role && $view_mode === 'handled_slips'): ?>
+                                                <th class="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Student / Slip #</th>
+                                            <?php endif; ?>
                                             <th class="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Activity / Purpose</th>
                                             <th class="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider">Date</th>
                                             <th class="px-6 py-4 text-xs font-bold text-gray-400 uppercase tracking-wider text-center">Status</th>
@@ -186,6 +237,12 @@ $page_title = "My Transaction History";
                                             $sessionJSON = htmlspecialchars(json_encode($sessionData), ENT_QUOTES, 'UTF-8');
                                         ?>
                                             <tr id="row-<?= $session['SessionID'] ?>" onclick='showReceipt(<?= $sessionJSON ?>)' class="hover:bg-orange-50/50 transition-colors cursor-pointer">
+                                                <?php if ($is_handler_role && $view_mode === 'handled_slips'): ?>
+                                                    <td class="px-6 py-4">
+                                                        <p class="font-bold text-gray-800 text-sm"><?= htmlspecialchars($session['StudentName']) ?></p>
+                                                        <p class="text-xs text-gray-500 font-mono">#<?= htmlspecialchars($session['SessionID']) ?></p>
+                                                    </td>
+                                                <?php endif; ?>
                                                 <td class="px-6 py-4">
                                                     <p class="font-bold text-gray-800 text-sm"><?= htmlspecialchars($session['Title']) ?></p>
                                                     <p class="text-xs text-gray-500 italic truncate max-w-xs">"<?= htmlspecialchars($session['Remarks'] ?? 'No reason provided.') ?>"</p>
@@ -207,6 +264,7 @@ $page_title = "My Transaction History";
                                 <div class="flex items-center gap-4">
                                     <p class="text-xs font-bold text-gray-500">Page <?= $page ?> of <?= $total_pages ?></p>
                                     <form method="GET" action="active_slips.php" class="flex items-center gap-2">
+                                        <input type="hidden" name="view" value="<?= htmlspecialchars($view_mode) ?>">
                                         <input type="hidden" name="search" value="<?= htmlspecialchars($search) ?>">
                                         <input type="hidden" name="status_filter" value="<?= htmlspecialchars($status_filter) ?>">
                                         <input type="hidden" name="date_sort" value="<?= htmlspecialchars($date_sort) ?>">
@@ -222,7 +280,10 @@ $page_title = "My Transaction History";
                                 </div>
                                 <div class="flex gap-2">
                                     <?php
-                                        $queryParams = ['search' => $search, 'status_filter' => $status_filter, 'date_sort' => $date_sort, 'per_page' => $records_per_page];
+                                        $queryParams = ['search' => $search, 'status_filter' => $status_filter, 'date_sort' => $date_sort, 'per_page' => $records_per_page, 'view' => $view_mode];
+                                        if (!$is_handler_role) {
+                                            unset($queryParams['view']);
+                                        }
                                         $pagination_query_string = http_build_query(array_filter($queryParams));
                                     ?>
                                     <a href="?page=<?= max(1, $page - 1) ?>&<?= $pagination_query_string ?>" class="px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-xs font-bold hover:bg-gray-50 <?= $page <= 1 ? 'opacity-50 cursor-not-allowed' : '' ?>">Previous</a>
@@ -249,18 +310,43 @@ $page_title = "My Transaction History";
     </div>
 
     <script>
+        const currentViewMode = '<?= $view_mode ?>';
+        const allSessionsData = <?= json_encode($sessionsForJs, JSON_UNESCAPED_UNICODE | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
+        function closeReceiptPanel() {
+            document.getElementById('receipt-empty-state').classList.remove('hidden');
+            document.getElementById('receipt-content-wrapper').classList.add('hidden');
+            document.getElementById('receipt-content-wrapper').innerHTML = '';
+
+            const activeRow = document.querySelector('tr.bg-orange-100');
+            if (activeRow) {
+                activeRow.classList.remove('bg-orange-100');
+            }
+        }
+
         function downloadReceipt(sessionId) {
-            const element = document.getElementById(`receipt-capture-${sessionId}`);
-            if (!element) {
-                console.error('Receipt element not found for download');
+            const sessionData = allSessionsData[sessionId];
+            if (!sessionData) {
+                console.error('Session data not found for download');
                 return;
             }
+            const element = document.getElementById(`receipt-capture-${sessionId}`);
+            if (!element) {
+                console.erroxr('Receipt element not found for download');
+                return;
+            }
+
+            const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+            const cleanStudentName = sessionData.StudentName.replace(/[^a-z0-9\s-]/gi, '').replace(/\s+/g, '_');
+            const newFilename = `${cleanStudentName}_${today}_slip_${sessionId}.png`;
+
             html2canvas(element, {
                 scale: 3,
-                backgroundColor: null 
+            backgroundColor: null,
+            ignoreElements: (el) => el.classList.contains('no-print-capture')
             }).then(canvas => {
                 const link = document.createElement('a');
-                link.download = `SNHS-Receipt-${sessionId}.png`;
+                link.download = newFilename;
                 link.href = canvas.toDataURL();
                 link.click();
             });
@@ -274,6 +360,8 @@ $page_title = "My Transaction History";
             const receiptWrapper = document.getElementById('receipt-content-wrapper');
             const emptyState = document.getElementById('receipt-empty-state');
             
+            const isHandledView = currentViewMode === 'handled_slips';
+
             const consumables = sessionData.items.filter(item => item.is_consumable == 1);
             const nonConsumables = sessionData.items.filter(item => item.is_consumable == 0);
 
@@ -303,6 +391,22 @@ $page_title = "My Transaction History";
                 }).join('');
             }
 
+            const footerHtml = !isHandledView ? `
+                <div class="p-4 border-t border-dashed border-slate-200 bg-slate-50/50 no-print-capture">
+                    <button onclick="downloadReceipt(${sessionData.SessionID})" 
+                       class="block w-full text-center bg-slate-800 text-white py-3 rounded-xl text-xs font-bold uppercase hover:bg-blue-600 transition-all shadow-lg shadow-slate-200">
+                        Save as Image
+                    </button>
+                </div>
+            ` : `
+                <div class="p-4 border-t border-dashed border-slate-200 bg-slate-50/50 no-print-capture">
+                    <button onclick="closeReceiptPanel()" 
+                       class="block w-full text-center bg-slate-200 text-slate-600 py-3 rounded-xl text-xs font-bold uppercase hover:bg-slate-300 transition-all">
+                        Close
+                    </button>
+                </div>
+            `;
+
             const receiptContent = `
                 <div id="receipt-capture-${sessionData.SessionID}" class="receipt-container thermal-font bg-white rounded-2xl shadow-xl border border-slate-200/50 h-full flex flex-col">
                     <div class="p-6 flex-1 overflow-y-auto custom-scrollbar flex flex-col" >
@@ -316,6 +420,14 @@ $page_title = "My Transaction History";
                             <div class="flex justify-between"><span>Date:</span><span>${new Date(sessionData.CreatedAt).toLocaleString()}</span></div>
                             <div class="flex justify-between items-start"><span>Activity:</span><span class="text-right w-1/2 truncate">${sessionData.Title}</span></div>
                             <div class="flex justify-between"><span>Session:</span><span>#${sessionData.SessionID}</span></div>
+                            ${['Pending', 'Approved', 'Issued', 'Returned', 'Cancelled'].includes(sessionData.Status) ?
+                                `<div class="flex justify-between"><span>Approved By:</span><span class="font-bold">${sessionData.ApproverName || '(Pending Approval)'}</span></div>`
+                                : ''
+                            }
+                            ${['Pending', 'Approved', 'Issued', 'Returned'].includes(sessionData.Status) ?
+                                `<div class="flex justify-between"><span>${sessionData.Status === 'Returned' ? 'Handled By:' : 'Issued By:'}</span><span class="font-bold">${sessionData.HandlerName || '(Pending Handover)'}</span></div>`
+                                : ''
+                            }
                         </div>
                         <div class="mb-6 flex-1 overflow-y-auto custom-scrollbar pr-2">
                             <div class="flex justify-between text-xs font-bold border-b border-dashed border-black mb-2 pb-1">
@@ -333,12 +445,7 @@ $page_title = "My Transaction History";
                             *** ${sessionData.Status.toUpperCase()} ***
                         </div>
                     </div>
-                    <div class="p-4 border-t border-dashed border-slate-200 bg-slate-50/50">
-                        <button onclick="downloadReceipt(${sessionData.SessionID})" 
-                           class="block w-full text-center bg-slate-800 text-white py-3 rounded-xl text-xs font-bold uppercase hover:bg-blue-600 transition-all shadow-lg shadow-slate-200">
-                            Save as Image
-                        </button>
-                    </div>
+                    ${footerHtml}
                 </div>
             `;
 
@@ -349,7 +456,7 @@ $page_title = "My Transaction History";
             const qrData = sessionData.QR_Code_Data || '';
             const qrEligible = ['Pending', 'Approved', 'Issued'];
 
-            if(qrContainer && qrData !== "" && qrEligible.includes(sessionData.Status)) {
+            if(!isHandledView && qrContainer && qrData !== "" && qrEligible.includes(sessionData.Status)) {
                 qrContainer.innerHTML = ""; // Clear previous QR code
                 new QRCode(qrContainer, {
                     text: qrData,
@@ -362,6 +469,9 @@ $page_title = "My Transaction History";
                 qrContainer.insertAdjacentHTML('afterend', '<p class="text-[8px] font-bold text-center uppercase text-slate-400">Scan for Release/Return</p>');
             } else if (qrContainer) {
                 qrContainer.innerHTML = `<div class="w-24 h-24 border-2 border-dashed border-slate-200 rounded-lg flex items-center justify-center mb-4"><span class="text-2xl">🔒</span></div><p class="text-[8px] font-bold text-center uppercase text-slate-400">Transaction Closed</p>`;
+                if (isHandledView) {
+                    qrContainer.classList.add('hidden');
+                }
             }
 
             emptyState.classList.add('hidden');

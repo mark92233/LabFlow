@@ -1,4 +1,6 @@
 
+<!-- AlpineJS for dropdowns and other interactive components -->
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
 <script>
      /**
      * Reveal Animation Logic
@@ -23,6 +25,24 @@
             const sidebar = document.getElementById('sidebar');
             if (sidebar) sidebar.classList.add('transition-all', 'duration-300');
         }, 50);
+
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar) {
+            sidebar.addEventListener('mouseenter', () => {
+                // Only expand on hover if the user's preference is 'collapsed'
+                if (localStorage.getItem('sidebarState') === 'collapsed') {
+                    document.body.classList.remove('sidebar-collapsed');
+                }
+            });
+
+            sidebar.addEventListener('mouseleave', () => {
+                // Only collapse on mouseleave if the user's preference is 'collapsed'
+                if (localStorage.getItem('sidebarState') === 'collapsed') {
+                    document.body.classList.add('sidebar-collapsed');
+                }
+            });
+        }
+
         revealElements.forEach(el => observer.observe(el));
 
         // Use a small timeout to ensure this runs after Alpine.js has initialized all components.
@@ -58,11 +78,17 @@
     function toggleSidebar() {
         const sidebar = document.getElementById('sidebar');
         if (sidebar) {
-            document.body.classList.toggle('sidebar-collapsed');
-            if (document.body.classList.contains('sidebar-collapsed')) {
-                localStorage.setItem('sidebarState', 'collapsed');
-            } else {
+            // Is the current preference collapsed?
+            const isCollapsed = localStorage.getItem('sidebarState') === 'collapsed';
+
+            if (isCollapsed) {
+                // If preference is collapsed, clicking should expand it permanently
                 localStorage.setItem('sidebarState', 'expanded');
+                document.body.classList.remove('sidebar-collapsed');
+            } else {
+                // If preference is expanded, clicking should collapse it
+                localStorage.setItem('sidebarState', 'collapsed');
+                document.body.classList.add('sidebar-collapsed');
             }
         }
     }

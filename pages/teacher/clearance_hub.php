@@ -2,303 +2,182 @@
 session_start();
 require_once '../../dbRelated/operation.php';
 
-// 1. Security & Role Check
-if (!isset($_SESSION['user_id']) || $_SESSION['user_role'] !== 'Teacher') {
+// 1. Security & Role Check - Admin, Teacher, or LabTech
+if (!isset($_SESSION['user_id']) || !in_array($_SESSION['user_role'], ['Admin', 'Teacher', 'LabTech'])) {
     header("Location: ../../index.php");
     exit();
 }
 
 $db = new DataManager();
-$class_id = $_GET['class_id'] ?? null;
+$search_id = trim($_GET['search_id'] ?? '');
+$clearanceData = null;
+$error = null;
 
-// 2. Handle Status Update (POST Request)
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['toggle_clearance'])) {
-    $enrollment_id = $_POST['enrollment_id'];
-    $current_status = $_POST['current_status'];
-    
-    // Logic: Determine target status
-    $new_status = ($current_status === 'Cleared') ? 'Pending' : 'Cleared';
-
-    // --- SECURITY GATEKEEPER ---
-    // If trying to mark as 'Cleared', we MUST check the database for damages first.
-    // This prevents bypassing the UI modal.
-    if ($new_status === 'Cleared' && $db->hasUnresolvedDamages($enrollment_id)) {
-        $error = "Action Blocked: This student has unresolved damages. Please resolve them in the Handover Terminal first.";
-    } else {
-        // Safe to proceed
-        $success = $db->updateClearanceStatus($enrollment_id, $new_status);
-        
-        if ($success) {
-            header("Location: clearance_hub.php?class_id=" . $class_id);
-            exit();
-        } else {
-            $error = "System Error: Could not update status.";
-        }
+if (!empty($search_id)) {
+    $clearanceData = $db->getStudentClearanceSummary($search_id);
+    if (!$clearanceData) {
+        $error = "No student found with the ID Number: " . htmlspecialchars($search_id);
     }
 }
 
-// 3. Fetch Data
-$students = $db->getEnrolledStudents($class_id);
-
+$page_title = "Clearance Hub";
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Clearance Hub | SNHS</title>
+    <title><?= $page_title ?> | LabFlow</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link rel="stylesheet" href="../../assets/css/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
-    <style>body { font-family: 'Inter', sans-serif; }</style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        #qr-scanner-container { position: relative; width: 100%; aspect-ratio: 1 / 1; margin: auto; overflow: hidden; border-radius: 1.5rem; background: #1e293b; box-shadow: 0 20px 40px -5px rgba(0, 0, 0, 0.25); }
+        #qr-reader { width: 100%; height: 100%; }
+        #qr-reader video { width: 100% !important; height: 100% !important; object-fit: cover; }
+        .qr-guide-overlay { position: absolute; inset: 0; pointer-events: none; }
+        .qr-guide-box { position: absolute; inset: 15%; }
+        .corner { position: absolute; width: 40px; height: 40px; border-color: rgba(255, 255, 255, 0.8); border-style: solid; }
+        .corner.top-left { top: 0; left: 0; border-width: 5px 0 0 5px; border-top-left-radius: 1rem; }
+        .corner.top-right { top: 0; right: 0; border-width: 5px 5px 0 0; border-top-right-radius: 1rem; }
+        .corner.bottom-left { bottom: 0; left: 0; border-width: 0 0 5px 5px; border-bottom-left-radius: 1rem; }
+        .corner.bottom-right { bottom: 0; right: 0; border-width: 0 5px 5px 0; border-bottom-right-radius: 1rem; }
+        .scan-laser { position: absolute; top: 15%; left: 15%; right: 15%; height: 3px; background: #f97316; box-shadow: 0 0 10px #f97316, 0 0 20px #f97316; border-radius: 3px; animation: scan-animation 3s infinite ease-in-out; }
+        @keyframes scan-animation { 0% { top: 15%; } 50% { top: 85%; } 100% { top: 15%; } }
+    </style>
 </head>
 <body class="bg-[#f8fafc] min-h-screen">
     <div class="flex min-h-screen">
         <?php include '../../includes/sidebar.php'; ?>
-        
         <div class="flex-1 flex flex-col">
             <?php include '../../includes/glass_header.php'; ?>
-            
             <main class="p-8 animate-reveal">
-                
-                <header class="mb-10 flex justify-between items-end">
-                    <div>
-                        <a href="class_activities.php?class_id=<?= htmlspecialchars($class_id) ?>" 
-                           class="text-[10px] font-bold text-slate-400 uppercase tracking-widest hover:text-blue-600 transition-colors mb-2 inline-block">
-                           ← Back to Activities
-                        </a>
-                        <h2 class="text-4xl font-black text-[#0f172a] uppercase italic tracking-tighter">
-                            Clearance <span class="text-blue-600">Hub</span>
-                        </h2>
-                        <p class="text-slate-500 text-xs mt-2 font-medium">Manage student clearance and check for damages.</p>
-                    </div>
-                    
-                    <div class="hidden md:flex gap-4">
-                        <div class="bg-white px-5 py-3 rounded-xl border border-slate-100 shadow-sm text-center">
-                            <span class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Total</span>
-                            <span class="text-xl font-black text-slate-700"><?= count($students) ?></span>
-                        </div>
-                        <div class="bg-white px-5 py-3 rounded-xl border border-slate-100 shadow-sm text-center">
-                            <span class="block text-[10px] font-black text-slate-400 uppercase tracking-widest">Cleared</span>
-                            <?php 
-                                $cleared_count = count(array_filter($students, fn($s) => $s['ClearanceStatus'] === 'Cleared'));
-                            ?>
-                            <span class="text-xl font-black text-emerald-500"><?= $cleared_count ?></span>
-                        </div>
-                    </div>
+                <header class="mb-8">
+                    <h2 class="text-4xl font-extrabold text-gray-800 tracking-tighter">
+                        Student <span class="text-orange-500">Clearance Hub.</span>
+                    </h2>
+                    <p class="text-slate-400 font-medium text-xs">Verify student liabilities and clearance status.</p>
                 </header>
 
-                <div class="bg-white rounded-[2rem] border border-slate-100 shadow-xl overflow-hidden">
-                    
-                    <?php if (isset($error)): ?>
-                        <div class="bg-red-50 text-red-600 px-6 py-4 text-xs font-bold uppercase tracking-wide border-b border-red-100 flex items-center gap-2">
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                            <?= $error ?>
+                <div id="search-container" class="bg-white p-6 rounded-2xl border border-gray-200/50 shadow-sm mb-8">
+                    <form method="GET" action="clearance_hub.php" class="flex items-center gap-4">
+                        <div class="relative flex-1">
+                            <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                            <input type="search" name="search_id" placeholder="Enter Student ID Number..." value="<?= htmlspecialchars($search_id) ?>" class="w-full pl-12 pr-4 py-4 bg-slate-50 border-slate-200 rounded-xl outline-none focus:ring-2 focus:ring-orange-500 shadow-sm transition-all font-medium">
                         </div>
-                    <?php endif; ?>
+                        <button type="submit" class="px-6 py-4 bg-slate-800 text-white rounded-xl font-bold text-sm hover:bg-orange-600 transition-all">Search</button>
+                        <button type="button" onclick="startScanner()" class="p-4 bg-orange-500 text-white rounded-xl font-bold hover:bg-orange-600 transition-all shadow-lg shadow-orange-500/20">
+                            <i class="fas fa-qrcode fa-lg"></i>
+                        </button>
+                    </form>
+                </div>
 
-                    <?php if (empty($students)): ?>
-                        <div class="p-20 text-center flex flex-col items-center justify-center">
-                            <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                                <svg class="w-8 h-8 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
-                            </div>
-                            <p class="text-slate-400 italic text-sm">No students enrolled yet.</p>
-                        </div>
+                <div id="camera-view" class="hidden p-6 flex-col items-center justify-center bg-white rounded-2xl border border-gray-200/50 shadow-sm mb-8">
+                    <div class="w-full max-w-lg mx-auto">
+                        <div class="flex justify-between items-center mb-4"><h3 class="text-lg font-bold text-slate-800">Scan Student ID or Clearance Slip</h3><button onclick="stopScanner()" class="text-sm font-bold text-slate-500 hover:text-red-500 transition-colors">Cancel Scan</button></div>
+                        <div id="qr-scanner-container"><div id="qr-reader"></div><div class="qr-guide-overlay"><div class="qr-guide-box"><div class="corner top-left"></div><div class="corner top-right"></div><div class="corner bottom-left"></div><div class="corner bottom-right"></div></div><div class="scan-laser"></div></div></div>
+                        <div id="qr-reader-results" class="text-center text-sm font-bold text-red-500 mt-4 h-5"></div>
+                    </div>
+                </div>
+
+                <div id="results-container">
+                    <?php if ($error): ?>
+                        <div class="text-center p-10 bg-white rounded-2xl border-2 border-dashed border-red-200"><p class="font-bold text-red-600"><?= $error ?></p></div>
+                    <?php elseif (!$clearanceData): ?>
+                        <div class="text-center p-10 bg-white rounded-2xl border-2 border-dashed border-slate-200"><i class="fas fa-user-check fa-3x text-slate-300 mb-4"></i><h3 class="font-bold text-slate-500">Awaiting Student Search</h3><p class="text-sm text-slate-400 mt-1">Use the search bar or QR scanner to look up a student.</p></div>
                     <?php else: ?>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left border-collapse">
-                                <thead class="bg-slate-50/80 border-b border-slate-100 backdrop-blur-sm sticky top-0 z-10">
-                                    <tr>
-                                        <th class="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/3">Student Name</th>
-                                        <th class="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/3">Status</th>
-                                        <th class="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest w-1/3 text-right">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="divide-y divide-slate-100">
-                                    <?php foreach ($students as $student): 
-                                        // CHECK FOR DAMAGES FOR THIS STUDENT
-                                        $damages = $db->getStudentDamages($student['MasterID']);
-                                        $has_damages = !empty($damages);
-                                        // Encode damages to JSON for the JavaScript modal
-                                        $damages_json = htmlspecialchars(json_encode($damages), ENT_QUOTES, 'UTF-8');
-                                    ?>
-                                        <tr class="group hover:bg-blue-50/30 transition-all duration-200">
-                                            
-                                            <td class="p-6">
-                                                <div class="flex items-center gap-3">
-                                                    <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-black text-slate-400 group-hover:bg-blue-100 group-hover:text-blue-600 transition-colors">
-                                                        <?= substr($student['Full_Name'], 0, 1) ?>
-                                                    </div>
-                                                    <div>
-                                                        <div class="font-bold text-slate-700 text-sm group-hover:text-blue-700 transition-colors">
-                                                            <?= htmlspecialchars($student['Full_Name']) ?>
-                                                        </div>
-                                                        <div class="text-[10px] text-slate-400 font-mono mt-0.5">
-                                                            ID: <?= htmlspecialchars($student['ID_Number']) ?>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </td>
+                        <div class="bg-white p-8 rounded-t-2xl border-x border-t border-slate-200/50 shadow-sm flex justify-between items-center">
+                            <div><h3 class="text-2xl font-black text-slate-800"><?= htmlspecialchars($clearanceData['student']['Full_Name']) ?></h3><p class="font-mono text-slate-500"><?= htmlspecialchars($clearanceData['student']['ID_Number']) ?></p></div>
+                            <?php if ($clearanceData['is_cleared']): ?>
+                                <div class="px-6 py-3 bg-emerald-100 text-emerald-600 rounded-xl font-black uppercase text-sm tracking-widest flex items-center gap-3"><i class="fas fa-check-circle"></i><span>CLEARED</span></div>
+                            <?php else: ?>
+                                <div class="px-6 py-3 bg-red-100 text-red-600 rounded-xl font-black uppercase text-sm tracking-widest flex items-center gap-3 animate-pulse"><i class="fas fa-exclamation-triangle"></i><span>NOT CLEARED</span></div>
+                            <?php endif; ?>
+                        </div>
 
-                                            <td class="p-6">
-                                                <div class="flex items-center gap-3">
-                                                    <?php if ($student['ClearanceStatus'] === 'Cleared'): ?>
-                                                        <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-100 text-emerald-600 text-[10px] font-black uppercase tracking-wide">
-                                                            <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> Cleared
-                                                        </span>
-                                                    <?php else: ?>
-                                                        <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-100 text-amber-600 text-[10px] font-black uppercase tracking-wide">
-                                                            <span class="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse"></span> Pending
-                                                        </span>
-                                                    <?php endif; ?>
+                        <div class="bg-white p-2 rounded-b-2xl border border-slate-200/50 shadow-lg" x-data="{ tab: 'damages' }">
+                            <div class="flex items-center gap-2 border-b border-slate-100 mb-4">
+                                <button @click="tab = 'damages'" :class="{ 'bg-slate-800 text-white': tab === 'damages', 'text-slate-500 hover:bg-slate-100': tab !== 'damages' }" class="flex-1 px-4 py-3 rounded-t-lg font-bold text-xs uppercase tracking-wider transition-all">Damages (<?= count($clearanceData['damages']) ?>)</button>
+                                <button @click="tab = 'sessions'" :class="{ 'bg-slate-800 text-white': tab === 'sessions', 'text-slate-500 hover:bg-slate-100': tab !== 'sessions' }" class="flex-1 px-4 py-3 rounded-t-lg font-bold text-xs uppercase tracking-wider transition-all">Borrowing History (<?= count($clearanceData['sessions']) ?>)</button>
+                            </div>
 
-                                                    <?php if ($has_damages): ?>
-                                                        <span class="inline-flex items-center gap-1 px-2 py-1 rounded bg-red-50 border border-red-100 text-red-500 text-[9px] font-bold uppercase tracking-wide animate-pulse">
-                                                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                                                            Has Damages
-                                                        </span>
-                                                    <?php endif; ?>
-                                                </div>
-                                            </td>
+                            <div x-show="tab === 'damages'" class="p-4 space-y-3 max-h-96 overflow-y-auto custom-scrollbar">
+                                <?php if (empty($clearanceData['damages'])): ?>
+                                    <p class="text-center text-slate-400 text-sm py-4">No damage history found.</p>
+                                <?php else: foreach($clearanceData['damages'] as $damage): 
+                                    $isUnresolved = $damage['status'] !== 'Resolved';
+                                    $link = $isUnresolved ? "settlement_reviews.php?search=" . urlencode($clearanceData['student']['ID_Number']) . "&highlight_id=" . $damage['damage_id'] : "#";
+                                    $tag = $isUnresolved ? 'a' : 'div';
+                                ?>
+                                    <<?= $tag ?> href="<?= $link ?>" class="block p-4 rounded-xl flex justify-between items-center <?= $isUnresolved ? 'bg-red-50 border border-red-100 hover:bg-blue-50 hover:border-blue-200 cursor-pointer' : 'bg-green-50 border border-green-100 opacity-70' ?>">
+                                        <div>
+                                            <p class="font-bold text-slate-800"><?= htmlspecialchars($damage['Item_Name']) ?></p>
+                                            <p class="text-xs text-slate-500">Type: <?= htmlspecialchars($damage['damage_type']) ?> | Qty: <?= htmlspecialchars($damage['qty_damaged']) ?></p>
+                                            <p class="text-xs text-slate-400 italic">"<?= htmlspecialchars($damage['notes']) ?>"</p>
+                                        </div>
+                                        <span class="px-3 py-1 rounded-md text-[9px] font-black uppercase <?= $isUnresolved ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600' ?>"><?= htmlspecialchars($damage['status']) ?></span>
+                                    </<?= $tag ?>>
+                                <?php endforeach; endif; ?>
+                            </div>
 
-                                            <td class="p-6 text-right">
-                                                <form method="POST" id="form-<?= $student['EnrollmentID'] ?>">
-                                                    <input type="hidden" name="enrollment_id" value="<?= $student['EnrollmentID'] ?>">
-                                                    <input type="hidden" name="current_status" value="<?= $student['ClearanceStatus'] ?>">
-                                                    
-                                                    <input type="hidden" name="toggle_clearance" value="1">
-                                                    
-                                                    <button type="button" 
-                                                            onclick="handleClearanceClick(
-                                                                '<?= $student['EnrollmentID'] ?>', 
-                                                                '<?= $student['ClearanceStatus'] ?>', 
-                                                                '<?= $damages_json ?>',
-                                                                '<?= htmlspecialchars($student['Full_Name']) ?>'
-                                                            )"
-                                                            class="relative inline-flex items-center justify-center px-4 py-2 text-[10px] font-black uppercase tracking-widest rounded-lg transition-all duration-200 border
-                                                            <?= $student['ClearanceStatus'] === 'Cleared' 
-                                                                ? 'bg-white border-red-100 text-red-500 hover:bg-red-50 hover:border-red-200' 
-                                                                : 'bg-white border-blue-100 text-blue-600 hover:bg-blue-600 hover:text-white hover:border-blue-600' 
-                                                            ?>">
-                                                        <?= $student['ClearanceStatus'] === 'Cleared' ? 'Revoke' : 'Mark Cleared' ?>
-                                                    </button>
-                                                </form>
-                                            </td>
-                                        </tr>
-                                    <?php endforeach; ?>
-                                </tbody>
-                            </table>
+                            <div x-show="tab === 'sessions'" class="p-4 space-y-3 max-h-96 overflow-y-auto custom-scrollbar">
+                                <?php if (empty($clearanceData['sessions'])): ?>
+                                    <p class="text-center text-slate-400 text-sm py-4">No borrowing history found.</p>
+                                <?php else: foreach($clearanceData['sessions'] as $session): 
+                                    $isIssued = $session['Status'] === 'Issued';
+                                    $tag = $isIssued ? 'a' : 'div';
+                                    $href = $isIssued ? "handover.php?status_filter=Issued&show_receipt_sid=" . $session['SessionID'] : '#';
+                                ?>
+                                    <<?= $tag ?> href="<?= $href ?>" class="block p-4 rounded-xl flex justify-between items-center <?= !in_array($session['Status'], ['Returned', 'Cancelled']) ? 'bg-orange-50 border border-orange-100' : 'bg-slate-50 border border-slate-100 opacity-70' ?> <?= $isIssued ? 'hover:bg-blue-50 hover:border-blue-200 cursor-pointer' : '' ?>">
+                                        <div>
+                                            <p class="font-bold text-slate-800">Slip #<?= htmlspecialchars($session['SessionID']) ?>: <?= htmlspecialchars($session['ActivityTitle']) ?></p>
+                                            <p class="text-xs text-slate-500"><?= date('M d, Y', strtotime($session['CreatedAt'])) ?></p>
+                                        </div>
+                                        <span class="px-3 py-1 rounded-md text-[9px] font-black uppercase <?= !in_array($session['Status'], ['Returned', 'Cancelled']) ? 'bg-orange-100 text-orange-600' : 'bg-slate-100 text-slate-500' ?>"><?= htmlspecialchars($session['Status']) ?></span>
+                                    </<?= $tag ?>>
+                                <?php endforeach; endif; ?>
+                            </div>
                         </div>
                     <?php endif; ?>
                 </div>
             </main>
         </div>
     </div>
-
-    <div id="damageModal" class="fixed inset-0 z-50 hidden" style="z-index: 9999;">
-        <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onclick="closeModal()"></div>
-        
-        <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-full max-w-lg p-4">
-            <div class="bg-white rounded-2xl shadow-2xl overflow-hidden animate-reveal border border-slate-200">
-                
-                <div class="p-6 border-b border-slate-100 flex justify-between items-center bg-red-50">
-                    <div class="flex items-center gap-4">
-                        <div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-red-500 shadow-inner">
-                            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-                        </div>
-                        <div>
-                            <h3 class="text-xl font-black text-slate-800 uppercase italic tracking-tighter">Cannot Clear Student</h3>
-                            <p class="text-[10px] font-bold text-red-500 uppercase tracking-widest mt-1" id="modalStudentName">Student Name</p>
-                        </div>
-                    </div>
-                    <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 transition-colors bg-white rounded-full p-1 hover:bg-slate-100">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                    </button>
-                </div>
-                
-                <div class="p-6 bg-white">
-                    <p class="text-sm text-slate-600 mb-6 font-medium">
-                        This student has <span class="font-bold text-red-500 underline decoration-red-200">unresolved damages</span>. Please resolve these items in the Handover Terminal before granting clearance.
-                    </p>
-                    
-                    <div class="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden shadow-inner">
-                        <table class="w-full text-left">
-                            <thead class="bg-slate-100 border-b border-slate-200">
-                                <tr>
-                                    <th class="p-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Item / Qty</th>
-                                    <th class="p-4 text-[9px] font-black text-slate-500 uppercase tracking-widest">Issue</th>
-                                    <th class="p-4 text-[9px] font-black text-slate-500 uppercase tracking-widest text-right">Date</th>
-                                </tr>
-                            </thead>
-                            <tbody id="modalDamageList" class="divide-y divide-slate-100">
-                                </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div class="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
-                    <button onclick="closeModal()" class="bg-slate-800 text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all shadow-lg shadow-slate-200">
-                        Okay, I understand
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Audio cues for scanner -->
+    <audio id="scan-success-sound" src="../../assets/audio/scan_su.wav" preload="auto"></audio>
+    <audio id="scan-error-sound" src="../../assets/audio/scan_f.wav" preload="auto"></audio>
 
     <script>
-        function handleClearanceClick(enrollmentId, currentStatus, damagesJson, studentName) {
-            
-            // Case 1: Revoking Clearance (Always Allowed)
-            if (currentStatus === 'Cleared') {
-                document.getElementById('form-' + enrollmentId).submit();
-                return;
-            }
-
-            // Case 2: Granting Clearance (Must Check Damages)
-            const damages = JSON.parse(damagesJson);
-
-            if (damages.length > 0) {
-                // Found damages! Show Modal.
-                showDamageModal(studentName, damages);
-            } else {
-                // No damages. Proceed.
-                document.getElementById('form-' + enrollmentId).submit();
-            }
+        let html5QrCode;
+        function startScanner() {
+            document.getElementById('search-container').classList.add('hidden');
+            const cameraView = document.getElementById('camera-view');
+            cameraView.classList.remove('hidden');
+            cameraView.classList.add('flex');
+            if (!html5QrCode) html5QrCode = new Html5Qrcode("qr-reader");
+            const qrCodeSuccessCallback = (decodedText, decodedResult) => {
+                let studentId = decodedText;
+                try {
+                    const url = new URL(decodedText);
+                    if (url.searchParams.has('search_id')) studentId = url.searchParams.get('search_id');
+                } catch (e) { /* Not a URL, use as is */ }
+                document.getElementById('scan-success-sound').play();
+                stopScanner();
+                window.location.href = `clearance_hub.php?search_id=${encodeURIComponent(studentId)}`;
+            };
+            html5QrCode.start({ facingMode: "environment" }, { fps: 10 }, qrCodeSuccessCallback)
+                .catch(err => { document.getElementById('qr-reader-results').innerText = "Error: Could not access camera."; });
         }
-
-        function showDamageModal(name, damages) {
-            const modal = document.getElementById('damageModal');
-            const list = document.getElementById('modalDamageList');
-            const nameLabel = document.getElementById('modalStudentName');
-            
-            nameLabel.textContent = name;
-            
-            list.innerHTML = damages.map(item => `
-                <tr class="hover:bg-red-50/50 transition-colors">
-                    <td class="p-4">
-                        <div class="text-xs font-bold text-slate-800">${item.ItemName || 'Unknown Item'}</div>
-                        <div class="text-[9px] text-slate-400 font-mono mt-0.5">Qty: ${item.qty_damaged}</div>
-                    </td>
-                    <td class="p-4">
-                        <span class="inline-block px-2 py-0.5 rounded bg-red-100 text-red-600 text-[9px] font-bold uppercase italic border border-red-200">
-                            ${item.damage_type || 'Broken'}
-                        </span>
-                        <div class="text-[9px] text-slate-500 mt-1 italic">"${item.notes || 'No notes'}"</div>
-                    </td>
-                    <td class="p-4 text-right">
-                        <div class="text-[10px] text-slate-500 font-mono font-medium">
-                            ${item.logged_at ? item.logged_at.split(' ')[0] : '-'}
-                        </div>
-                    </td>
-                </tr>
-            `).join('');
-
-            modal.classList.remove('hidden');
-        }
-
-        function closeModal() {
-            document.getElementById('damageModal').classList.add('hidden');
+        function stopScanner() {
+            if (html5QrCode && html5QrCode.isScanning) html5QrCode.stop().catch(err => console.error("Failed to stop scanner.", err));
+            const cameraView = document.getElementById('camera-view');
+            cameraView.classList.add('hidden');
+            cameraView.classList.remove('flex');
+            document.getElementById('search-container').classList.remove('hidden');
+            document.getElementById('qr-reader-results').innerText = '';
         }
     </script>
+    <?php include '../../includes/layout_footer.php'; ?>
 </body>
 </html>
